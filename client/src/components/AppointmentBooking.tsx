@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Calendar, UserCheck, CheckCircle2 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import AppointmentCalendar from "./AppointmentCalendar";
 import PatientForm from "./PatientForm";
 import AppointmentConfirmation from "./AppointmentConfirmation";
-import type { Doctor } from "@shared/schema";
+import type { Doctor, InsertAppointment } from "@shared/schema";
 
 interface SelectedSlot {
   doctor: Doctor;
@@ -48,15 +50,74 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
     setCurrentStep('form');
   };
 
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  const createAppointmentMutation = useMutation({
+    mutationFn: async (appointmentData: InsertAppointment) => {
+      const response = await fetch('/api/appointments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(appointmentData),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Error al crear la cita');
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate appointments cache
+      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      toast({
+        title: "Cita creada exitosamente",
+        description: "Su cita ha sido reservada correctamente.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error al crear la cita",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const handlePatientFormSubmit = async (data: PatientData) => {
+    if (!selectedSlot) return;
+    
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Create appointment date-time
+    const [hours, minutes] = selectedSlot.time.split(':').map(Number);
+    const appointmentDateTime = new Date(selectedSlot.date);
+    appointmentDateTime.setHours(hours, minutes, 0, 0);
     
-    setPatientData(data);
-    setCurrentStep('confirmation');
-    setIsLoading(false);
+    const appointmentData: InsertAppointment = {
+      doctorId: selectedSlot.doctor.id,
+      patientName: data.patientName,
+      patientEmail: data.patientEmail,
+      patientPhone: data.patientPhone,
+      patientAge: data.patientAge,
+      appointmentDate: appointmentDateTime,
+      notes: data.notes || null,
+      duration: 30,
+      status: 'scheduled',
+    };
+    
+    try {
+      await createAppointmentMutation.mutateAsync(appointmentData);
+      setPatientData(data);
+      setCurrentStep('confirmation');
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleBackToCalendar = () => {

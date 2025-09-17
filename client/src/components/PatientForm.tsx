@@ -28,7 +28,7 @@ const patientFormSchema = z.object({
   patientName: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
   patientEmail: z.string().email("Email inválido"),
   patientPhone: z.string().min(10, "Número de teléfono inválido"),
-  patientAge: z.number().min(1, "Edad debe ser mayor a 0").max(120, "Edad debe ser menor a 120"),
+  patientAge: z.coerce.number().min(1, "Edad debe ser mayor a 0").max(120, "Edad debe ser menor a 120"),
   notes: z.string().optional(),
 });
 
@@ -168,7 +168,6 @@ export default function PatientForm({
                         type="number" 
                         placeholder="Ej: 25" 
                         {...field}
-                        onChange={(e) => field.onChange(parseInt(e.target.value))}
                         data-testid="input-patient-age"
                       />
                     </FormControl>

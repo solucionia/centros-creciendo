@@ -1,50 +1,55 @@
 import AppointmentBooking from "@/components/AppointmentBooking";
-import drPediatricImage from '@assets/generated_images/Female_pediatric_doctor_portrait_cb1e4f59.png';
-import drAdultImage from '@assets/generated_images/Male_adult_medicine_doctor_portrait_35015c47.png';
-import drFamilyImage from '@assets/generated_images/Female_family_doctor_portrait_0aa52486.png';
-import drPediatricMaleImage from '@assets/generated_images/Male_pediatric_specialist_portrait_10491633.png';
+import { useQuery } from "@tanstack/react-query";
+import type { Doctor } from "@shared/schema";
 
 export default function Home() {
-  // todo: remove mock functionality
-  const mockDoctors = [
-    {
-      id: '1',
-      name: 'Ana María González',
-      specialty: 'pediatric' as const,
-      photoUrl: drPediatricImage,
-      email: 'ana.gonzalez@centrocreciendo.com',
-      phone: '+57 300 123 4567'
+  const { data: doctors, isLoading, error } = useQuery({
+    queryKey: ['/api/doctors'],
+    queryFn: async (): Promise<Doctor[]> => {
+      const response = await fetch('/api/doctors');
+      if (!response.ok) {
+        throw new Error('Failed to fetch doctors');
+      }
+      return response.json();
     },
-    {
-      id: '2',
-      name: 'Carlos Rodríguez',
-      specialty: 'adult' as const,
-      photoUrl: drAdultImage,
-      email: 'carlos.rodriguez@centrocreciendo.com',
-      phone: '+57 300 234 5678'
-    },
-    {
-      id: '3',
-      name: 'María Elena Vargas',
-      specialty: 'family' as const,
-      photoUrl: drFamilyImage,
-      email: 'maria.vargas@centrocreciendo.com',
-      phone: '+57 300 345 6789'
-    },
-    {
-      id: '4',
-      name: 'Diego Martínez',
-      specialty: 'pediatric' as const,
-      photoUrl: drPediatricMaleImage,
-      email: 'diego.martinez@centrocreciendo.com',
-      phone: '+57 300 456 7890'
-    }
-  ];
+  });
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="text-muted-foreground">Cargando médicos...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-red-600">Error al cargar los médicos</p>
+          <p className="text-sm text-muted-foreground">Por favor, intenta recargar la página</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!doctors || doctors.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <p className="text-muted-foreground">No hay médicos disponibles</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
-        <AppointmentBooking doctors={mockDoctors} />
+        <AppointmentBooking doctors={doctors} />
       </div>
     </div>
   );
