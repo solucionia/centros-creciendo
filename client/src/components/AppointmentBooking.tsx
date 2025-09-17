@@ -9,6 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import AppointmentCalendar from "./AppointmentCalendar";
 import PatientForm from "./PatientForm";
 import AppointmentConfirmation from "./AppointmentConfirmation";
+import ModifyAppointment from "./ModifyAppointment";
+import CancelAppointment from "./CancelAppointment";
 import type { Doctor, InsertAppointment } from "@shared/schema";
 
 interface SelectedSlot {
@@ -30,7 +32,7 @@ interface AppointmentBookingProps {
 }
 
 export default function AppointmentBooking({ doctors }: AppointmentBookingProps) {
-  const [currentStep, setCurrentStep] = useState<'calendar' | 'form' | 'confirmation'>('calendar');
+  const [currentStep, setCurrentStep] = useState<'calendar' | 'form' | 'confirmation' | 'modify' | 'cancel'>('calendar');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | undefined>();
   const [patientData, setPatientData] = useState<PatientData | undefined>();
@@ -186,6 +188,20 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
           />
         );
 
+      case 'modify':
+        return (
+          <ModifyAppointment
+            onBack={() => setCurrentStep('calendar')}
+          />
+        );
+
+      case 'cancel':
+        return (
+          <CancelAppointment
+            onBack={() => setCurrentStep('calendar')}
+          />
+        );
+
       default:
         return null;
     }
@@ -198,11 +214,31 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
         <CardHeader>
           <div className="flex items-center justify-between mb-4">
             <CardTitle className="text-2xl font-bold text-primary">
-              Centro Creciendo
+              CitaFacil
             </CardTitle>
-            <Badge variant="outline" className="text-sm">
-              Reserva de Citas
-            </Badge>
+            <div className="flex gap-2">
+              <button 
+                className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover-elevate active-elevate-2"
+                onClick={() => setCurrentStep('calendar')}
+                data-testid="button-reserva-cita"
+              >
+                Reserva Cita
+              </button>
+              <button 
+                className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md text-sm font-medium hover-elevate active-elevate-2"
+                onClick={() => setCurrentStep('modify')}
+                data-testid="button-modifica-cita"
+              >
+                Modifica Cita
+              </button>
+              <button 
+                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm font-medium hover-elevate active-elevate-2"
+                onClick={() => setCurrentStep('cancel')}
+                data-testid="button-cancela-cita"
+              >
+                Cancela Cita
+              </button>
+            </div>
           </div>
 
           {/* Progress Steps */}
@@ -261,8 +297,8 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
       <Card>
         <CardContent className="p-4">
           <div className="text-center text-sm text-muted-foreground">
-            <p>Centro Creciendo - Clínica Pediátrica y Medicina General</p>
-            <p>📧 info@centrocreciendo.com | 📞 +57 (1) 123-4567</p>
+            <p>CitaFacil - Sistema de Gestión de Citas Médicas</p>
+            <p>📧 info@citafacil.com | 📞 +57 (1) 123-4567</p>
           </div>
         </CardContent>
       </Card>
