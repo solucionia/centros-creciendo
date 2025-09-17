@@ -3,6 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChevronLeft, ChevronRight, Calendar, Filter } from "lucide-react";
 import TimeSlot from "./TimeSlot";
 import type { Doctor } from "@shared/schema";
@@ -24,6 +31,7 @@ export default function AppointmentCalendar({
 }: AppointmentCalendarProps) {
   const [currentWeek, setCurrentWeek] = useState(new Date());
   const [filterSpecialty, setFilterSpecialty] = useState<string>("all");
+  const [filterDoctor, setFilterDoctor] = useState<string>("all");
 
   // Generate time slots for a day (9 AM to 5 PM, 30-minute intervals)
   const timeSlots = useMemo(() => {
@@ -50,11 +58,20 @@ export default function AppointmentCalendar({
     });
   }, [currentWeek]);
 
-  // Filter doctors by specialty
+  // Filter doctors by specialty and doctor
   const filteredDoctors = useMemo(() => {
-    if (filterSpecialty === "all") return doctors;
-    return doctors.filter(doctor => doctor.specialty === filterSpecialty);
-  }, [doctors, filterSpecialty]);
+    let filtered = doctors;
+    
+    if (filterSpecialty !== "all") {
+      filtered = filtered.filter(doctor => doctor.specialty === filterSpecialty);
+    }
+    
+    if (filterDoctor !== "all") {
+      filtered = filtered.filter(doctor => doctor.id === filterDoctor);
+    }
+    
+    return filtered;
+  }, [doctors, filterSpecialty, filterDoctor]);
 
   // Mock availability data - in real app this would come from the backend
   const isSlotAvailable = (doctor: Doctor, time: string, date: Date): boolean => {
@@ -104,22 +121,48 @@ export default function AppointmentCalendar({
             <span>Calendario de Citas</span>
           </CardTitle>
           
-          <Tabs value={filterSpecialty} onValueChange={setFilterSpecialty} className="w-auto">
-            <TabsList className="grid grid-cols-4 w-full">
-              <TabsTrigger value="all" className="text-xs" data-testid="filter-all">
-                Todas
-              </TabsTrigger>
-              <TabsTrigger value="pediatric" className="text-xs" data-testid="filter-pediatric">
-                Pediatría
-              </TabsTrigger>
-              <TabsTrigger value="adult" className="text-xs" data-testid="filter-adult">
-                Adultos
-              </TabsTrigger>
-              <TabsTrigger value="family" className="text-xs" data-testid="filter-family">
-                Familiar
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <div className="flex flex-col lg:flex-row gap-4 w-full">
+            <div className="flex-1">
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">
+                Especialidad
+              </label>
+              <Tabs value={filterSpecialty} onValueChange={setFilterSpecialty} className="w-full">
+                <TabsList className="grid grid-cols-4 w-full">
+                  <TabsTrigger value="all" className="text-xs" data-testid="filter-all">
+                    Todas
+                  </TabsTrigger>
+                  <TabsTrigger value="pediatric" className="text-xs" data-testid="filter-pediatric">
+                    Pediatría
+                  </TabsTrigger>
+                  <TabsTrigger value="adult" className="text-xs" data-testid="filter-adult">
+                    Adultos
+                  </TabsTrigger>
+                  <TabsTrigger value="family" className="text-xs" data-testid="filter-family">
+                    Familiar
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+            
+            <div className="lg:w-64">
+              <label className="text-xs font-medium text-muted-foreground mb-2 block">
+                Médico
+              </label>
+              <Select value={filterDoctor} onValueChange={setFilterDoctor}>
+                <SelectTrigger data-testid="select-doctor-filter">
+                  <SelectValue placeholder="Todos los médicos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los médicos</SelectItem>
+                  {doctors.map((doctor) => (
+                    <SelectItem key={doctor.id} value={doctor.id}>
+                      Dr. {doctor.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         </div>
 
         {/* Week Navigation */}
