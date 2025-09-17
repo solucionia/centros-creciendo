@@ -22,6 +22,54 @@ export interface IStorage {
   cancelAppointment(id: string): Promise<boolean>;
 }
 
+// External system integration function
+const sendAppointmentToExternalSystem = async (appointment: Appointment, doctor: Doctor) => {
+  // URL del sistema externo - configurable
+  const EXTERNAL_SYSTEM_URL = process.env.EXTERNAL_BOOKING_WEBHOOK || 'https://tu-sistema-externo.com/api/appointments';
+  
+  try {
+    const payload = {
+      // Mapear datos al formato que espera el sistema externo
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      doctorSpecialty: doctor.specialty,
+      patientName: appointment.patientName,
+      patientEmail: appointment.patientEmail,
+      patientPhone: appointment.patientPhone,
+      patientAge: appointment.patientAge,
+      appointmentDate: appointment.appointmentDate.toISOString(),
+      duration: appointment.duration,
+      notes: appointment.notes,
+      status: appointment.status,
+      // Datos adicionales que puede necesitar el sistema externo
+      source: 'centro-creciendo-booking',
+      appointmentId: appointment.id
+    };
+
+    const response = await fetch(EXTERNAL_SYSTEM_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Agregar headers de autenticación si es necesario
+        // 'Authorization': `Bearer ${process.env.EXTERNAL_SYSTEM_TOKEN}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      console.error('Error enviando cita al sistema externo:', response.status, response.statusText);
+      // Log del error pero no fallar la creación local
+      const errorText = await response.text();
+      console.error('Respuesta del sistema externo:', errorText);
+    } else {
+      console.log('Cita enviada exitosamente al sistema externo:', appointment.id);
+    }
+  } catch (error) {
+    console.error('Error de conexión con sistema externo:', error);
+    // No lanzar error para no afectar la funcionalidad principal
+  }
+};
+
 export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private doctors: Map<string, Doctor>;
@@ -152,6 +200,16 @@ export class MemStorage implements IStorage {
       notes: insertAppointment.notes ?? null
     };
     this.appointments.set(id, appointment);
+    
+    // Enviar la cita al sistema externo de forma asíncrona
+    const doctor = this.doctors.get(appointment.doctorId);
+    if (doctor) {
+      // Ejecutar en background sin esperar respuesta
+      setImmediate(() => {
+        sendAppointmentToExternalSystem(appointment, doctor);
+      });
+    }
+    
     return appointment;
   }
 
