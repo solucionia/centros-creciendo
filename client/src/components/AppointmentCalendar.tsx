@@ -116,19 +116,19 @@ export default function AppointmentCalendar({
   return (
     <Card className="w-full">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2">
-              <img 
-                src={centroLogo} 
-                alt="Centro Creciendo" 
-                className="h-8 w-auto"
-              />
-            </div>
-            <span className="text-primary">Reserva tu Cita</span>
-          </CardTitle>
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
+          <div className="flex flex-col space-y-2">
+            <img 
+              src={centroLogo} 
+              alt="Centro Creciendo" 
+              className="h-8 w-auto self-start"
+            />
+            <CardTitle className="text-primary">
+              Reserva tu Cita
+            </CardTitle>
+          </div>
           
-          <div className="flex flex-col lg:flex-row gap-4 w-full">
+          <div className="flex flex-col sm:flex-row gap-4 lg:max-w-2xl">
             <div className="flex-1">
               <label className="text-xs font-medium text-muted-foreground mb-2 block">
                 Especialidad
@@ -151,7 +151,7 @@ export default function AppointmentCalendar({
               </Tabs>
             </div>
             
-            <div className="lg:w-64">
+            <div className="sm:w-64">
               <label className="text-xs font-medium text-muted-foreground mb-2 block">
                 Médico
               </label>
