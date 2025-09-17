@@ -13,6 +13,7 @@ import {
 import { ChevronLeft, ChevronRight, Calendar, Filter } from "lucide-react";
 import TimeSlot from "./TimeSlot";
 import type { Doctor } from "@shared/schema";
+import centroLogo from "@assets/centrocreciendo_1758144139702.png";
 
 interface AppointmentCalendarProps {
   doctors: Doctor[];
@@ -116,9 +117,15 @@ export default function AppointmentCalendar({
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center space-x-2">
-            <Calendar className="h-5 w-5 text-primary" />
-            <span>Calendario de Citas</span>
+          <CardTitle className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
+              <img 
+                src={centroLogo} 
+                alt="Centro Creciendo" 
+                className="h-8 w-auto"
+              />
+            </div>
+            <span className="text-primary">Reserva tu Cita</span>
           </CardTitle>
           
           <div className="flex flex-col lg:flex-row gap-4 w-full">
