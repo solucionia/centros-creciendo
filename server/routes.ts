@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertDoctorSchema, insertAppointmentSchema } from "@shared/schema";
 import { z } from "zod";
+import { executeDriCloudAutomation } from "./dricloud-automation";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Doctor routes
@@ -114,6 +115,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error cancelling appointment:', error);
       res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
+  // DriCloud automation endpoint
+  app.post('/api/dricloud/automate', async (req, res) => {
+    try {
+      const { patientData, doctorSpecialty } = req.body;
+      
+      if (!patientData || !doctorSpecialty) {
+        return res.status(400).json({ error: 'Missing required data' });
+      }
+
+      console.log('🤖 Iniciando automatización DriCloud desde servidor');
+      console.log('📊 Datos recibidos:', { patientData, doctorSpecialty });
+      
+      const result = await executeDriCloudAutomation(patientData, doctorSpecialty);
+      
+      res.json({ 
+        success: true, 
+        message: result,
+        status: 'completed'
+      });
+    } catch (error) {
+      console.error('❌ Error en automatización DriCloud:', error);
+      res.status(500).json({ 
+        error: 'Error en automatización DriCloud',
+        message: error instanceof Error ? error.message : 'Error desconocido'
+      });
     }
   });
 
