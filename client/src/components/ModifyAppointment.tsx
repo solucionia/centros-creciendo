@@ -3,9 +3,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Search, Calendar, User, Clock } from "lucide-react";
+import { Search, Calendar, User, Clock, Save, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import type { AppointmentWithDoctor } from "@shared/schema";
 
 interface ModifyAppointmentProps {
@@ -26,6 +32,49 @@ export default function ModifyAppointment({ onBack }: ModifyAppointmentProps) {
         throw new Error('Error al cargar las citas');
       }
       return response.json();
+    },
+  });
+
+  // Form schema for updating appointments
+  const updateAppointmentSchema = z.object({
+    patientName: z.string().min(2, "El nombre debe tener al menos 2 caracteres"),
+    patientEmail: z.string().email("Email inválido"),
+    patientPhone: z.string().min(10, "Número de teléfono inválido"),
+    patientAge: z.coerce.number().min(1, "Edad debe ser mayor a 0").max(120, "Edad debe ser menor a 120"),
+    notes: z.string().optional(),
+  });
+
+  type UpdateAppointmentData = z.infer<typeof updateAppointmentSchema>;
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ appointmentId, data }: { appointmentId: string; data: UpdateAppointmentData }) => {
+      const response = await fetch(`/api/appointments/${appointmentId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+      if (!response.ok) {
+        throw new Error('Error al actualizar la cita');
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
+      toast({
+        title: "Cita actualizada",
+        description: "La cita ha sido actualizada exitosamente.",
+      });
+      setSelectedAppointment(undefined);
+      refetch();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error al actualizar",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -201,23 +250,205 @@ export default function ModifyAppointment({ onBack }: ModifyAppointmentProps) {
           </div>
         )}
 
-        {/* Modification Form (placeholder for now) */}
-        {selectedAppointment && (
-          <Card className="p-4 bg-muted/50">
-            <h3 className="text-lg font-semibold mb-4">Modificar Cita</h3>
-            <p className="text-muted-foreground">
-              Funcionalidad de modificación disponible próximamente. 
-              Por ahora puedes cancelar la cita y crear una nueva.
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => setSelectedAppointment(undefined)}
-              className="mt-4"
-            >
-              Cerrar
-            </Button>
-          </Card>
-        )}
+        {/* Modification Form */}
+        {selectedAppointment && <ModificationForm 
+          appointment={selectedAppointment}
+          onCancel={() => setSelectedAppointment(undefined)}
+          onSubmit={(data) => updateMutation.mutate({ appointmentId: selectedAppointment.id, data })}
+          isLoading={updateMutation.isPending}
+          updateAppointmentSchema={updateAppointmentSchema}
+        />}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ModificationForm component
+interface ModificationFormProps {
+  appointment: AppointmentWithDoctor;
+  onCancel: () => void;
+  onSubmit: (data: any) => void;
+  isLoading: boolean;
+  updateAppointmentSchema: z.ZodSchema<any>;
+}
+
+function ModificationForm({ appointment, onCancel, onSubmit, isLoading, updateAppointmentSchema }: ModificationFormProps) {
+  const form = useForm({
+    resolver: zodResolver(updateAppointmentSchema),
+    defaultValues: {
+      patientName: appointment.patientName,
+      patientEmail: appointment.patientEmail,
+      patientPhone: appointment.patientPhone,
+      patientAge: appointment.patientAge,
+      notes: appointment.notes || "",
+    },
+  });
+
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('es-ES', {
+      weekday: 'long',
+      year: 'numeric', 
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const formatTime = (date: string) => {
+    return new Date(date).toLocaleTimeString('es-ES', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getSpecialtyLabel = (specialty: string) => {
+    switch (specialty.toLowerCase()) {
+      case 'pediatric':
+        return 'Pediatría';
+      case 'adult':
+        return 'Medicina General';
+      case 'family':
+        return 'Medicina Familiar';
+      default:
+        return specialty;
+    }
+  };
+
+  return (
+    <Card className="p-4 bg-muted/50">
+      <CardHeader>
+        <CardTitle className="flex items-center space-x-2">
+          <Save className="h-5 w-5 text-primary" />
+          <span>Modificar Cita</span>
+        </CardTitle>
+        
+        {/* Appointment Summary (non-editable) */}
+        <div className="bg-card p-4 rounded-lg border">
+          <h4 className="font-medium mb-2">Información de la Cita</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="flex items-center space-x-2">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">Dr. {appointment.doctor.name}</span>
+              <Badge>{getSpecialtyLabel(appointment.doctor.specialty)}</Badge>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+              <span>{formatDate(appointment.appointmentDate.toString())}</span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span>{formatTime(appointment.appointmentDate.toString())}</span>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">
+            * Para cambiar fecha u horario, deberás cancelar esta cita y crear una nueva
+          </p>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="patientName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nombre del Paciente</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Nombre completo" {...field} data-testid="input-patient-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="patientAge"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Edad</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="Edad" {...field} data-testid="input-patient-age" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="patientEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input type="email" placeholder="email@ejemplo.com" {...field} data-testid="input-patient-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="patientPhone"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Teléfono</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Número de teléfono" {...field} data-testid="input-patient-phone" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notas (opcional)</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Información adicional sobre la consulta..."
+                      className="min-h-[80px]"
+                      {...field}
+                      data-testid="input-patient-notes"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="flex justify-end space-x-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={isLoading}
+                data-testid="button-cancel-modification"
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={isLoading}
+                data-testid="button-save-modification"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                {isLoading ? "Guardando..." : "Guardar Cambios"}
+              </Button>
+            </div>
+          </form>
+        </Form>
       </CardContent>
     </Card>
   );

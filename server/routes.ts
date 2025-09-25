@@ -105,6 +105,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/appointments/:id', async (req, res) => {
+    try {
+      // Parse and convert appointmentDate if provided
+      const requestData = req.body.appointmentDate 
+        ? { ...req.body, appointmentDate: new Date(req.body.appointmentDate) }
+        : req.body;
+      
+      // Create a partial schema for updates (make all fields optional)
+      const updateSchema = insertAppointmentSchema.partial();
+      const validatedData = updateSchema.parse(requestData);
+      
+      const updatedAppointment = await storage.updateAppointment(req.params.id, validatedData);
+      if (!updatedAppointment) {
+        return res.status(404).json({ error: 'Appointment not found' });
+      }
+      
+      // Return appointment with doctor info for consistency
+      const doctor = await storage.getDoctor(updatedAppointment.doctorId);
+      const appointmentWithDoctor = { ...updatedAppointment, doctor };
+      
+      res.json(appointmentWithDoctor);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Invalid data', details: error.errors });
+      }
+      console.error('Error updating appointment:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  });
+
   app.post('/api/appointments/:id/cancel', async (req, res) => {
     try {
       const cancelled = await storage.cancelAppointment(req.params.id);
