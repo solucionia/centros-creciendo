@@ -12,8 +12,11 @@ import {
   Phone, 
   FileText,
   Download,
-  Share2
+  Share2,
+  ExternalLink
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { startDriCloudReservation } from "@/utils/dricloud-automation";
 import type { Doctor } from "@shared/schema";
 
 interface AppointmentData {
@@ -45,6 +48,38 @@ export default function AppointmentConfirmation({
   onDownloadConfirmation,
   onShareConfirmation
 }: AppointmentConfirmationProps) {
+  const { toast } = useToast();
+
+  const handleDriCloudReservation = async () => {
+    try {
+      toast({
+        title: "Conectando con DriCloud",
+        description: "Abriendo ventana de automatización...",
+      });
+      
+      await startDriCloudReservation(
+        {
+          patientName: patientData.patientName,
+          patientEmail: patientData.patientEmail, 
+          patientPhone: patientData.patientPhone,
+          patientAge: patientData.patientAge,
+          notes: patientData.notes
+        },
+        doctor.specialty as 'pediatric' | 'adult' | 'family'
+      );
+      
+      toast({
+        title: "DriCloud abierto",
+        description: "La automatización está en progreso. Revisa la nueva ventana.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error al conectar con DriCloud",
+        description: "Por favor, permite pop-ups e intenta nuevamente.",
+        variant: "destructive",
+      });
+    }
+  };
   const getSpecialtyLabel = (specialty: string) => {
     switch (specialty.toLowerCase()) {
       case 'pediatric':
@@ -127,7 +162,7 @@ export default function AppointmentConfirmation({
             <Badge className={`${getSpecialtyColor(doctor.specialty)} mb-2`}>
               {getSpecialtyLabel(doctor.specialty)}
             </Badge>
-            <p className="text-sm text-muted-foreground">Centro Creciendo</p>
+            <p className="text-sm text-muted-foreground">CitaFacil</p>
           </div>
         </div>
 
@@ -216,6 +251,25 @@ export default function AppointmentConfirmation({
             <li>• Si tienes exámenes previos, llévalos contigo</li>
             <li>• En caso de cancelar, hazlo con 24 horas de anticipación</li>
           </ul>
+        </div>
+
+        {/* DriCloud Integration */}
+        <div className="bg-primary/5 p-4 rounded-lg border border-primary/20">
+          <h4 className="font-semibold text-primary mb-2 flex items-center space-x-2">
+            <ExternalLink className="h-4 w-4" />
+            <span>Completar Reserva en DriCloud</span>
+          </h4>
+          <p className="text-sm text-muted-foreground mb-3">
+            Haz clic para abrir DriCloud y completar automáticamente la reserva de tu cita.
+          </p>
+          <Button 
+            onClick={handleDriCloudReservation}
+            className="w-full"
+            data-testid="button-dricloud-reservation"
+          >
+            <ExternalLink className="h-4 w-4 mr-2" />
+            Reservar en DriCloud
+          </Button>
         </div>
 
         {/* Action Buttons */}

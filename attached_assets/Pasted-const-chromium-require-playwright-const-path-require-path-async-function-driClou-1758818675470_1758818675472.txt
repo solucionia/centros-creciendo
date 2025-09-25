@@ -1,0 +1,1204 @@
+const { chromium } = require("playwright");
+const path = require("path");
+
+async function driCloudURLCorrecta() {
+  console.log("🏥 DRICLOUD - URL ESPECÍFICA");
+  console.log("============================");
+  console.log(
+    "🔗 URL: https://citaonline.dricloud.net/?URL=dricloud_creciendomirasierra_20627620#"
+  );
+  console.log("📝 Rellena el formulario sin límite de tiempo");
+  console.log("🔄 Navegación directa a la URL correcta");
+  console.log("");
+
+  const browser = await chromium.launch({
+    headless: false,
+    slowMo: 1200,
+    timeout: 0,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--disable-gpu",
+    ],
+  });
+
+  try {
+    const context = await browser.newContext({
+      timeout: 0,
+      userAgent:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    });
+
+    const paginaFormulario = await context.newPage();
+    const paginaDriCloud = await context.newPage();
+
+    // Configurar sin timeouts
+    paginaFormulario.setDefaultTimeout(0);
+    paginaDriCloud.setDefaultTimeout(0);
+
+    // URLs específicas
+    const urlFormulario = `file://${path.resolve(
+      __dirname,
+      "formulario-cita-dricloud.html"
+    )}`;
+    const urlDriCloudCorrecta =
+      "https://citaonline.dricloud.net/?URL=dricloud_creciendomirasierra_20627620#";
+
+    console.log("📄 Cargando formulario de datos...");
+
+    // Cargar formulario local
+    await paginaFormulario.goto(urlFormulario);
+
+    // Títulos distintivos
+    await paginaFormulario.evaluate(() => {
+      document.title = "📝 DATOS - Tómate tu tiempo";
+    });
+
+    await paginaFormulario.bringToFront();
+
+    console.log("✅ Formulario cargado");
+    console.log("");
+    console.log("👉 SIN PRISA:");
+    console.log("   ⏰ Sin límite de tiempo para rellenar");
+    console.log("   📝 Completa todos los datos que puedas");
+    console.log('   🚀 Haz clic en "Procesar Cita" cuando termines');
+    console.log("");
+    console.log("⏳ Esperando que envíes el formulario...");
+
+    // Monitoreo sin timeout
+    let datosDelPaciente = null;
+    let formularioCompletado = false;
+
+    // Bucle de espera infinito
+    while (!formularioCompletado) {
+      try {
+        const estadoActual = await paginaFormulario.evaluate(() => {
+          return {
+            enviado: window.citaFormularioEnviado === true,
+            datos: {
+              nombre: document.getElementById("nombre")?.value || "",
+              apellidos: document.getElementById("apellidos")?.value || "",
+              fechaNacimiento:
+                document.getElementById("fechaNacimiento")?.value || "",
+              telefono: document.getElementById("telefono")?.value || "",
+              dni: document.getElementById("dni")?.value || "",
+              pasaporte: document.getElementById("pasaporte")?.value || "",
+              email: document.getElementById("email")?.value || "",
+              genero: document.getElementById("genero")?.value || "",
+              servicio:
+                document.getElementById("servicio")?.value ||
+                "OTORRINOLARINGOLOGÍA",
+              aseguradora: document.getElementById("aseguradora")?.value || "",
+              comentarios: document.getElementById("comentarios")?.value || "",
+            },
+          };
+        });
+
+        if (estadoActual.enviado) {
+          console.log("📤 ¡Formulario enviado detectado!");
+          datosDelPaciente = estadoActual.datos;
+          formularioCompletado = true;
+          break;
+        }
+
+        // Mostrar que sigue esperando cada 30 segundos
+        if (Date.now() % 30000 < 3000) {
+          console.log("⏳ Esperando... (sin límite de tiempo)");
+        }
+
+        // Esperar 3 segundos antes del siguiente chequeo
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+      } catch (error) {
+        console.log("⚠️  Error en monitoreo:", error.message);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
+    }
+
+    console.log("✅ ¡Datos extraídos correctamente!");
+    console.log("📊 Información del paciente:");
+
+    Object.entries(datosDelPaciente).forEach(([campo, valor]) => {
+      if (valor && valor.trim()) {
+        console.log(`   ✓ ${campo}: "${valor}"`);
+      } else {
+        console.log(`   ⚪ ${campo}: (no especificado)`);
+      }
+    });
+
+    console.log("");
+    console.log("🌐 Conectando a DriCloud con la URL específica...");
+    console.log("🔗 " + urlDriCloudCorrecta);
+
+    // CARGAR LA URL ESPECÍFICA DE DRICLOUD
+    try {
+      await paginaDriCloud.goto(urlDriCloudCorrecta, {
+        waitUntil: "domcontentloaded",
+        timeout: 30000,
+      });
+      console.log("✅ DriCloud cargado correctamente");
+    } catch (error) {
+      console.log("⚠️  Error cargando DriCloud, reintentando...");
+      try {
+        await paginaDriCloud.goto(urlDriCloudCorrecta);
+        console.log("✅ DriCloud cargado en segundo intento");
+      } catch (error2) {
+        console.log("❌ Error persistente cargando DriCloud:", error2.message);
+        console.log("🔄 Continuando con la automatización...");
+      }
+    }
+
+    await paginaDriCloud.bringToFront();
+
+    // Configurar página de DriCloud
+    await paginaDriCloud.evaluate(() => {
+      document.title = "🏥 DRICLOUD - Automatización Activa";
+
+      // Crear notificación de estado
+      const notificacion = document.createElement("div");
+      notificacion.id = "estado-automatizacion";
+      notificacion.style.cssText = `
+                position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+                background: linear-gradient(45deg, #e74c3c, #c0392b);
+                color: white; padding: 15px 30px; border-radius: 25px;
+                font-weight: bold; z-index: 999999; font-size: 16px;
+                box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+                border: 3px solid white; text-align: center;
+            `;
+      notificacion.innerHTML =
+        "🤖 AUTOMATIZACIÓN DRICLOUD EN PROCESO<br><small>No cierres esta ventana</small>";
+      document.body.appendChild(notificacion);
+    });
+
+    // Esperar a que la página se cargue completamente
+    console.log("⏳ Esperando que DriCloud cargue completamente...");
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    console.log("🚀 Iniciando automatización de DriCloud...");
+    console.log("");
+
+    // PASO 1: Buscar y hacer clic en "Reservar cita"
+    console.log('📋 PASO 1: Buscando botón "Reservar cita"...');
+    try {
+      // Esperar a que aparezcan elementos interactivos
+      await paginaDriCloud.waitForSelector(
+        'button, a, input[type="button"], .btn',
+        { timeout: 15000 }
+      );
+
+      const selectoresReservar = [
+        'button:has-text("Reservar cita")',
+        'button:has-text("Reservar")',
+        'a:has-text("Reservar")',
+        'input[value*="Reservar" i]',
+        '.btn:has-text("Reservar")',
+        'button:contains("Reservar")',
+        'button[class*="reservar" i]',
+        'a[href*="reservar" i]',
+        // Selectores más generales como fallback
+        "button:first-child",
+        ".btn:first-child",
+        "button",
+        ".btn",
+      ];
+
+      let reservarEncontrado = false;
+      for (const selector of selectoresReservar) {
+        try {
+          const elementos = await paginaDriCloud.$$(selector);
+          for (const elemento of elementos) {
+            const esVisible = await elemento.isVisible();
+            const esHabilitado = await elemento.isEnabled();
+
+            if (esVisible && esHabilitado) {
+              await elemento.click();
+              console.log(`✅ Clic en reservar: ${selector}`);
+              reservarEncontrado = true;
+              break;
+            }
+          }
+          if (reservarEncontrado) break;
+        } catch (error) {
+          console.log(`⚪ No funciona: ${selector}`);
+        }
+      }
+
+      if (!reservarEncontrado) {
+        console.log("⚠️  No se encontró botón específico de reservar");
+        console.log(
+          "🔍 Intentando hacer clic en cualquier botón disponible..."
+        );
+
+        try {
+          await paginaDriCloud.click("button:visible, .btn:visible");
+          console.log("✅ Clic en primer botón disponible");
+        } catch (error) {
+          console.log("❌ No se pudo hacer clic en ningún botón");
+        }
+      }
+    } catch (error) {
+      console.log("⚠️  Error en paso 1:", error.message);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    // PASO 2: Seleccionar servicio médico
+    console.log("📋 PASO 2: Seleccionando servicio médico...");
+    try {
+      const servicioDeseado =
+        datosDelPaciente.servicio || "OTORRINOLARINGOLOGÍA";
+      console.log(`🎯 Buscando servicio: ${servicioDeseado}`);
+
+      await paginaDriCloud.waitForSelector(
+        "button, div, .service, .especialidad",
+        { timeout: 10000 }
+      );
+
+      // SELECTORES ESPECÍFICOS PARA BOTONES "SELECCIONAR" VERDES
+      const selectoresServicio = [
+        // Prioridad 1: Botones "Seleccionar" específicos (VERDES)
+        'button:has-text("Seleccionar"):not(:has-text("Más info")):first-of-type',
+        '.btn:has-text("Seleccionar"):not(:has-text("Más info")):first-of-type',
+        'button[class*="btn-success"]:has-text("Seleccionar")',
+        'button[style*="green"]:has-text("Seleccionar")',
+
+        // Prioridad 2: Botones verdes por clase CSS
+        'button.btn-success:has-text("Seleccionar")',
+        '.btn.btn-success:has-text("Seleccionar")',
+        'button[class*="success"]:has-text("Seleccionar")',
+
+        // Prioridad 3: Por servicio específico + botón Seleccionar
+        `div:has-text("${servicioDeseado}") button:has-text("Seleccionar")`,
+        `div:has-text("OTORRINOLARINGOLOGÍA") button:has-text("Seleccionar")`,
+        `div:has-text("PEDIATRÍA") button:has-text("Seleccionar")`,
+
+        // Prioridad 4: Fallbacks más específicos
+        'button:has-text("Seleccionar"):first-of-type',
+        '.btn:has-text("Seleccionar"):first-of-type',
+      ];
+
+      let servicioSeleccionado = false;
+      for (const selector of selectoresServicio) {
+        try {
+          console.log(`🔍 Probando selector: ${selector}`);
+          const elementos = await paginaDriCloud.$$(selector);
+
+          for (const elemento of elementos) {
+            const esVisible = await elemento.isVisible();
+            const esHabilitado = await elemento.isEnabled();
+
+            // VERIFICAR QUE NO SEA BOTÓN "MÁS INFO"
+            const textoBoton = await elemento.textContent();
+            const esBotonMasInfo =
+              textoBoton && textoBoton.toLowerCase().includes("más info");
+
+            console.log(
+              `   📝 Elemento encontrado: "${textoBoton}", Visible: ${esVisible}, Habilitado: ${esHabilitado}, Es Más Info: ${esBotonMasInfo}`
+            );
+
+            if (esVisible && esHabilitado && !esBotonMasInfo) {
+              console.log(`   🎯 Haciendo clic en: "${textoBoton}"`);
+              await elemento.click();
+              console.log(
+                `✅ Servicio seleccionado correctamente: ${selector}`
+              );
+              servicioSeleccionado = true;
+              break;
+            } else if (esBotonMasInfo) {
+              console.log(`   ⚪ Saltando botón "Más info": ${selector}`);
+            }
+          }
+          if (servicioSeleccionado) break;
+        } catch (error) {
+          console.log(`⚪ Error con selector: ${selector} - ${error.message}`);
+        }
+      }
+
+      if (!servicioSeleccionado) {
+        console.log('⚠️  No se encontraron botones "Seleccionar" específicos');
+        console.log("🔍 Buscando botones verdes alternativos...");
+
+        // FALLBACK: Buscar botones verdes por clase CSS o estilo
+        try {
+          const fallbackSelectores = [
+            "button.btn-success",
+            ".btn.btn-success",
+            'button[class*="green"]',
+            'button[style*="background-color: #5cb85c"]',
+            'button[style*="background: #5cb85c"]',
+          ];
+
+          for (const selector of fallbackSelectores) {
+            const elementos = await paginaDriCloud.$$(selector);
+            for (const elemento of elementos) {
+              const textoBoton = await elemento.textContent();
+              const esVisible = await elemento.isVisible();
+              const esHabilitado = await elemento.isEnabled();
+
+              console.log(
+                `   🔍 Fallback: "${textoBoton}", Visible: ${esVisible}, Habilitado: ${esHabilitado}`
+              );
+
+              if (
+                esVisible &&
+                esHabilitado &&
+                textoBoton &&
+                textoBoton.includes("Seleccionar")
+              ) {
+                console.log(`   🎯 Clic en botón verde: "${textoBoton}"`);
+                await elemento.click();
+                console.log(
+                  `✅ Servicio seleccionado con fallback: ${selector}`
+                );
+                servicioSeleccionado = true;
+                break;
+              }
+            }
+            if (servicioSeleccionado) break;
+          }
+        } catch (error) {
+          console.log("⚠️  Error en fallback:", error.message);
+        }
+      }
+
+      if (!servicioSeleccionado) {
+        console.log("❌ No se pudo seleccionar servicio automáticamente");
+        console.log(
+          '👆 Por favor, haz clic MANUALMENTE en el botón verde "Seleccionar"'
+        );
+        console.log("⏳ El script continuará cuando avances...");
+
+        // Esperar a que el usuario haga clic manualmente
+        try {
+          await paginaDriCloud.waitForURL("**/*", { timeout: 30000 });
+          console.log("✅ Usuario avanzó manualmente");
+        } catch (error) {
+          console.log("⏳ Continuando con la automatización...");
+        }
+      }
+    } catch (error) {
+      console.log("⚠️  Error en selección de servicio:", error.message);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    // PASO 3: Seleccionar profesional (Dr. Fernando Mera)
+    console.log("📋 PASO 3: Seleccionando Dr. Fernando Mera...");
+    try {
+      await paginaDriCloud.waitForSelector(
+        "button, div, .doctor, .profesional",
+        { timeout: 10000 }
+      );
+
+      // SELECTORES ESPECÍFICOS PARA EL BOTÓN "SELECCIONAR" DEL MÉDICO
+      const selectoresMedico = [
+        // Prioridad 1: Botón "Seleccionar" específico (VERDE)
+        'button:has-text("Seleccionar"):not(:has-text("Más info"))',
+        '.btn:has-text("Seleccionar"):not(:has-text("Más info"))',
+        'button.btn-success:has-text("Seleccionar")',
+
+        // Prioridad 2: Botón en contexto del Dr. Fernando
+        'div:has-text("Dr. Fernando") button:has-text("Seleccionar")',
+        'div:has-text("Fernando") button:has-text("Seleccionar")',
+        'div:has-text("Otorrinolaringólogo") button:has-text("Seleccionar")',
+
+        // Prioridad 3: Botones verdes por clase CSS
+        "button.btn-success",
+        ".btn.btn-success",
+        'button[class*="success"]:has-text("Seleccionar")',
+
+        // Prioridad 4: Fallbacks generales
+        'button:has-text("Seleccionar"):first-of-type',
+        'button[class*="select"]',
+      ];
+
+      let medicoSeleccionado = false;
+      for (const selector of selectoresMedico) {
+        try {
+          console.log(`🔍 Probando selector médico: ${selector}`);
+          const elementos = await paginaDriCloud.$$(selector);
+
+          for (const elemento of elementos) {
+            const esVisible = await elemento.isVisible();
+            const esHabilitado = await elemento.isEnabled();
+
+            // VERIFICAR QUE NO SEA BOTÓN "MÁS INFO"
+            const textoBoton = await elemento.textContent();
+            const esBotonMasInfo =
+              textoBoton && textoBoton.toLowerCase().includes("más info");
+
+            console.log(
+              `   📝 Médico elemento: "${textoBoton}", Visible: ${esVisible}, Habilitado: ${esHabilitado}, Es Más Info: ${esBotonMasInfo}`
+            );
+
+            if (esVisible && esHabilitado && !esBotonMasInfo) {
+              console.log(`   🎯 Seleccionando Dr. Fernando: "${textoBoton}"`);
+              await elemento.click();
+              console.log(
+                `✅ Dr. Fernando seleccionado correctamente: ${selector}`
+              );
+              medicoSeleccionado = true;
+              break;
+            } else if (esBotonMasInfo) {
+              console.log(`   ⚪ Saltando botón "Más info": ${selector}`);
+            }
+          }
+          if (medicoSeleccionado) break;
+        } catch (error) {
+          console.log(
+            `⚪ Error con selector médico: ${selector} - ${error.message}`
+          );
+        }
+      }
+
+      if (!medicoSeleccionado) {
+        console.log('⚠️  No se encontraron botones "Seleccionar" del médico');
+        console.log("🔍 Buscando botones verdes alternativos...");
+
+        // FALLBACK: Buscar cualquier botón verde visible
+        try {
+          const fallbackMedico = [
+            "button.btn-success:visible:enabled",
+            ".btn.btn-success:visible:enabled",
+            'button[class*="green"]:visible:enabled',
+            "button:visible:enabled",
+          ];
+
+          for (const selector of fallbackMedico) {
+            const elementos = await paginaDriCloud.$$(selector);
+            for (const elemento of elementos) {
+              const textoBoton = await elemento.textContent();
+              const esVisible = await elemento.isVisible();
+              const esHabilitado = await elemento.isEnabled();
+
+              console.log(
+                `   🔍 Fallback médico: "${textoBoton}", Visible: ${esVisible}, Habilitado: ${esHabilitado}`
+              );
+
+              if (
+                esVisible &&
+                esHabilitado &&
+                textoBoton &&
+                (textoBoton.includes("Seleccionar") ||
+                  textoBoton.trim() === "Seleccionar")
+              ) {
+                console.log(`   🎯 Clic en botón médico: "${textoBoton}"`);
+                await elemento.click();
+                console.log(`✅ Médico seleccionado con fallback: ${selector}`);
+                medicoSeleccionado = true;
+                break;
+              }
+            }
+            if (medicoSeleccionado) break;
+          }
+        } catch (error) {
+          console.log("⚠️  Error en fallback médico:", error.message);
+        }
+      }
+
+      if (!medicoSeleccionado) {
+        console.log("❌ No se pudo seleccionar médico automáticamente");
+        console.log(
+          '👆 Por favor, haz clic MANUALMENTE en el botón verde "Seleccionar" del Dr. Fernando'
+        );
+        console.log("⏳ El script continuará cuando avances...");
+
+        // Esperar a que el usuario haga clic manualmente
+        try {
+          await paginaDriCloud.waitForURL("**/*", { timeout: 30000 });
+          console.log(
+            "✅ Usuario avanzó manualmente en la selección del médico"
+          );
+        } catch (error) {
+          console.log("⏳ Continuando con la automatización...");
+        }
+      }
+    } catch (error) {
+      console.log("⚠️  Error en selección de médico:", error.message);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    // PASO 4: Seleccionar fecha y hora
+    console.log("📋 PASO 4: Seleccionando fecha y hora...");
+    try {
+      await paginaDriCloud.waitForSelector(
+        'td, .calendar, .fecha, button[class*="day"]',
+        { timeout: 10000 }
+      );
+
+      console.log("📅 Buscando fechas disponibles...");
+
+      const selectoresFecha = [
+        // Días específicos disponibles
+        'td:has-text("25"):not(.disabled):not(.past)',
+        'td:has-text("26"):not(.disabled):not(.past)',
+        'td:has-text("27"):not(.disabled):not(.past)',
+        'td:has-text("28"):not(.disabled):not(.past)',
+        // Clases generales de disponibilidad
+        "td.available:not(.disabled)",
+        "td.enabled:not(.disabled)",
+        "button.available:not(.disabled)",
+        "td:not(.disabled):not(.past)",
+        // Fallbacks más amplios
+        'td[class*="available"]',
+        'button[class*="available"]',
+      ];
+
+      let fechaSeleccionada = false;
+      for (const selector of selectoresFecha) {
+        try {
+          const elementos = await paginaDriCloud.$$(selector);
+          for (const elemento of elementos) {
+            const esVisible = await elemento.isVisible();
+            const esHabilitado = await elemento.isEnabled();
+
+            if (esVisible && esHabilitado) {
+              await elemento.click();
+              console.log(`✅ Fecha seleccionada: ${selector}`);
+              fechaSeleccionada = true;
+              break;
+            }
+          }
+          if (fechaSeleccionada) break;
+        } catch (error) {
+          console.log(`⚪ Fecha no disponible: ${selector}`);
+        }
+      }
+
+      if (fechaSeleccionada) {
+        // Esperar a que aparezca selector de hora
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        console.log("🕐 Seleccionando hora...");
+        try {
+          const selectoresHora = [
+            'select option[value="20:00"]',
+            'button:has-text("20:00")',
+            'option[value="20:00"]',
+            'select option[value*="20"]',
+            'button:has-text("20")',
+            "select option:last-of-type",
+            "select option:not([disabled])",
+            'button:has-text("Seleccionar")',
+          ];
+
+          let horaSeleccionada = false;
+          for (const selector of selectoresHora) {
+            try {
+              if (selector.includes("option")) {
+                const selectElement = await paginaDriCloud.$("select");
+                if (selectElement) {
+                  await paginaDriCloud.selectOption("select", "20:00");
+                  console.log("✅ Hora 20:00 seleccionada");
+                  horaSeleccionada = true;
+                  break;
+                }
+              } else {
+                const elemento = await paginaDriCloud.$(selector);
+                if (elemento && (await elemento.isVisible())) {
+                  await elemento.click();
+                  console.log(`✅ Hora seleccionada: ${selector}`);
+                  horaSeleccionada = true;
+                  break;
+                }
+              }
+            } catch (error) {
+              console.log(`⚪ Hora no disponible: ${selector}`);
+            }
+          }
+
+          if (!horaSeleccionada) {
+            console.log(
+              "⚠️  No se pudo seleccionar hora específica, pero continuando..."
+            );
+          }
+
+          // HACER CLIC EN BOTÓN "SELECCIONAR" PARA AVANZAR - VERSIÓN SIMPLIFICADA
+          console.log(
+            '📋 Buscando botón "Seleccionar" para continuar (versión simplificada)...'
+          );
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+
+          // Primero, intentar con los selectores más básicos posibles
+          const selectoresSimples = [
+            "button",
+            ".btn",
+            'input[type="submit"]',
+            'input[type="button"]',
+          ];
+
+          console.log("🔍 Buscando TODOS los botones en la página...");
+          for (const selectorBase of selectoresSimples) {
+            try {
+              const todosLosElementos = await paginaDriCloud.$$(selectorBase);
+              console.log(
+                `📝 Encontrados ${todosLosElementos.length} elementos con selector: ${selectorBase}`
+              );
+
+              for (let i = 0; i < todosLosElementos.length; i++) {
+                const elemento = todosLosElementos[i];
+                try {
+                  const esVisible = await elemento.isVisible();
+                  const esHabilitado = await elemento.isEnabled();
+                  const textoBoton = await elemento.textContent();
+                  const clases = await elemento.getAttribute("class");
+
+                  console.log(
+                    `   [${i}] Texto: "${textoBoton}" | Visible: ${esVisible} | Habilitado: ${esHabilitado} | Clases: ${clases}`
+                  );
+
+                  // Buscar específicamente botones con texto "Seleccionar"
+                  if (
+                    esVisible &&
+                    esHabilitado &&
+                    textoBoton &&
+                    (textoBoton.includes("Seleccionar") ||
+                      textoBoton.trim() === "Seleccionar")
+                  ) {
+                    console.log(
+                      `   🎯 ¡BOTÓN ENCONTRADO! Haciendo clic en: "${textoBoton}"`
+                    );
+                    await elemento.click();
+                    console.log(`✅ Clic exitoso en botón: "${textoBoton}"`);
+                    continuarExitoso = true;
+                    break;
+                  }
+                } catch (error) {
+                  console.log(
+                    `   ⚪ Error inspeccionando elemento ${i}: ${error.message}`
+                  );
+                }
+              }
+              if (continuarExitoso) break;
+            } catch (error) {
+              console.log(
+                `⚠️ Error con selector ${selectorBase}: ${error.message}`
+              );
+            }
+          }
+
+          // Si no encuentra el botón específico, intentar con el último botón visible
+          if (!continuarExitoso) {
+            console.log(
+              "🔍 Intentando hacer clic en el último botón verde/visible..."
+            );
+            try {
+              const ultimoBotón = await paginaDriCloud.$(
+                "button:visible:last-of-type, .btn:visible:last-of-type"
+              );
+              if (ultimoBotón) {
+                const textoUltimo = await ultimoBotón.textContent();
+                console.log(
+                  `🎯 Haciendo clic en último botón: "${textoUltimo}"`
+                );
+                await ultimoBotón.click();
+                console.log("✅ Clic en último botón exitoso");
+                continuarExitoso = true;
+              }
+            } catch (error) {
+              console.log("⚠️ Error con último botón:", error.message);
+            }
+          }
+
+          if (!continuarExitoso) {
+            console.log(
+              "❌ No se pudo encontrar botón para continuar desde fecha/hora"
+            );
+            console.log(
+              '👆 Por favor, haz clic MANUALMENTE en el botón verde "Seleccionar"'
+            );
+            console.log("⏳ El script continuará cuando avances...");
+
+            // Esperar a que el usuario haga clic manualmente
+            try {
+              await paginaDriCloud.waitForURL("**/*", { timeout: 30000 });
+              console.log("✅ Usuario avanzó manualmente desde fecha/hora");
+            } catch (error) {
+              console.log("⏳ Continuando con la automatización...");
+            }
+          }
+        } catch (error) {
+          console.log("⚠️  Error seleccionando hora:", error.message);
+        }
+      } else {
+        console.log("⚠️  No se pudo seleccionar ninguna fecha");
+      }
+    } catch (error) {
+      console.log("⚠️  Error en selección de fecha/hora:", error.message);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+
+    // PASO 5: Rellenar formulario del NUEVO paciente (SIN HACER CLIC EN BOTONES)
+    console.log("📋 PASO 5: Rellenando formulario del NUEVO paciente...");
+    console.log(
+      "⚠️  IMPORTANTE: NO se hará clic en ningún botón después de rellenar"
+    );
+
+    try {
+      console.log(
+        "🔍 Buscando campos del formulario de nuevo paciente directamente..."
+      );
+
+      // Diagnóstico: Verificar si el formulario existe
+      try {
+        const formulario = await paginaDriCloud.$("form#formNuevoPaciente");
+        if (formulario) {
+          console.log("✅ Formulario 'formNuevoPaciente' encontrado");
+        } else {
+          console.log("❌ Formulario 'formNuevoPaciente' NO encontrado");
+        }
+      } catch (error) {
+        console.log("⚠️ Error verificando formulario:", error.message);
+      }
+
+      // Rellenar cada campo con selectores basados en el HTML real
+      console.log("🚀 Rellenando campos usando selectores exactos del HTML...");
+
+      const camposEspecificos = [
+        {
+          valor: datosDelPaciente.nombre,
+          selectores: ["input#PAC_NOMBRE", 'input[name="PAC_NOMBRE"]'],
+          label: "Nombre (PAC_NOMBRE)",
+        },
+        {
+          valor: datosDelPaciente.apellidos,
+          selectores: ["input#PAC_APELLIDOS", 'input[name="PAC_APELLIDOS"]'],
+          label: "Apellidos (PAC_APELLIDOS)",
+        },
+        {
+          valor: datosDelPaciente.fechaNacimiento,
+          selectores: [
+            "input#datetimepicker1",
+            'input[name="PAC_FECHA_NACIMIENTO"]',
+          ],
+          label: "Fecha de Nacimiento (datetimepicker1)",
+        },
+        {
+          valor: datosDelPaciente.telefono,
+          selectores: ["input#PAC_TELEFONO1", 'input[name="PAC_TELEFONO1"]'],
+          label: "Teléfono (PAC_TELEFONO1)",
+        },
+        {
+          valor: datosDelPaciente.dni,
+          selectores: ["input#PAC_NIF", 'input[name="PAC_NIF"]'],
+          label: "DNI/NIE/NIF (PAC_NIF)",
+        },
+        {
+          valor: datosDelPaciente.pasaporte,
+          selectores: ["input#PAC_PASAPORTE", 'input[name="PAC_PASAPORTE"]'],
+          label: "Pasaporte (PAC_PASAPORTE)",
+        },
+        {
+          valor: datosDelPaciente.email,
+          selectores: ["input#PAC_EMAIL", 'input[name="PAC_EMAIL"]'],
+          label: "Email (PAC_EMAIL)",
+        },
+      ];
+
+      for (const campo of camposEspecificos) {
+        if (campo.valor && campo.valor.trim()) {
+          console.log(`   📝 Buscando ${campo.label}: "${campo.valor}"`);
+
+          let campoRellenado = false;
+          for (const selector of campo.selectores) {
+            try {
+              console.log(`     🔍 Probando selector: ${selector}`);
+              const elemento = await paginaDriCloud.$(selector);
+
+              if (elemento) {
+                const esVisible = await elemento.isVisible();
+                const esHabilitado = await elemento.isEnabled();
+
+                console.log(
+                  `       📊 Elemento encontrado - Visible: ${esVisible}, Habilitado: ${esHabilitado}`
+                );
+
+                if (esVisible && esHabilitado) {
+                  console.log(`       📝 Rellenando con: "${campo.valor}"`);
+
+                  // Limpiar campo y rellenar
+                  await elemento.click({ clickCount: 3 });
+                  await elemento.fill(campo.valor);
+
+                  // Verificar que se rellenó
+                  const valorActual = await elemento.inputValue();
+                  console.log(
+                    `       ✅ ${campo.label} rellenado correctamente. Valor actual: "${valorActual}"`
+                  );
+
+                  campoRellenado = true;
+                  break;
+                } else {
+                  console.log(`       ⚪ Elemento no visible o deshabilitado`);
+                }
+              } else {
+                console.log(
+                  `       ❌ Elemento no encontrado con selector: ${selector}`
+                );
+              }
+            } catch (error) {
+              console.log(
+                `       ⚠️ Error con selector ${selector}: ${error.message}`
+              );
+            }
+          }
+
+          if (!campoRellenado) {
+            console.log(`     ❌ No se pudo rellenar: ${campo.label}`);
+          } else {
+            await new Promise((resolve) => setTimeout(resolve, 800));
+          }
+        } else {
+          console.log(`   ⚪ Saltando ${campo.label} (sin datos)`);
+        }
+      }
+
+      // Manejar género específico
+      if (datosDelPaciente.genero && datosDelPaciente.genero.trim()) {
+        console.log(`   📝 Seleccionando género: "${datosDelPaciente.genero}"`);
+
+        const selectoresGenero = ["select#cmbSEX_ID", 'select[name="SEX_ID"]'];
+
+        let generoSeleccionado = false;
+        for (const selector of selectoresGenero) {
+          try {
+            console.log(`     🔍 Probando selector género: ${selector}`);
+            const elemento = await paginaDriCloud.$(selector);
+
+            if (elemento && (await elemento.isVisible())) {
+              console.log(
+                `       📝 Seleccionando género: "${datosDelPaciente.genero}"`
+              );
+
+              // Mapear géneros a los valores del HTML
+              let valorGenero = "0"; // Sin determinar por defecto
+              if (
+                datosDelPaciente.genero.toLowerCase().includes("masculino") ||
+                datosDelPaciente.genero.toLowerCase().includes("hombre") ||
+                datosDelPaciente.genero.toLowerCase().includes("varón")
+              ) {
+                valorGenero = "2";
+              } else if (
+                datosDelPaciente.genero.toLowerCase().includes("femenino") ||
+                datosDelPaciente.genero.toLowerCase().includes("mujer")
+              ) {
+                valorGenero = "1";
+              }
+
+              await elemento.selectOption({ value: valorGenero });
+              console.log(
+                `       ✅ Género seleccionado correctamente (valor: ${valorGenero})`
+              );
+              generoSeleccionado = true;
+              break;
+            }
+          } catch (error) {
+            console.log(
+              `       ⚠️ Error con género ${selector}: ${error.message}`
+            );
+          }
+        }
+
+        if (!generoSeleccionado) {
+          console.log(`     ❌ No se pudo seleccionar género`);
+        }
+      }
+
+      // Seleccionar aseguradora si está disponible
+      if (datosDelPaciente.aseguradora && datosDelPaciente.aseguradora.trim()) {
+        console.log(
+          `   📝 Seleccionando aseguradora: "${datosDelPaciente.aseguradora}"`
+        );
+
+        try {
+          const elemento = await paginaDriCloud.$("select#SOC_ID");
+
+          if (elemento && (await elemento.isVisible())) {
+            // Mapear aseguradoras
+            let valorAseguradora = "";
+            const aseguradoraLower = datosDelPaciente.aseguradora.toLowerCase();
+
+            if (
+              aseguradoraLower.includes("fundación") ||
+              aseguradoraLower.includes("fundacion")
+            ) {
+              valorAseguradora = "3";
+            } else if (aseguradoraLower.includes("miembro")) {
+              valorAseguradora = "2";
+            } else if (
+              aseguradoraLower.includes("privado") ||
+              aseguradoraLower.includes("privada")
+            ) {
+              valorAseguradora = "1";
+            }
+
+            if (valorAseguradora) {
+              await elemento.selectOption({ value: valorAseguradora });
+              console.log(
+                `     ✅ Aseguradora seleccionada (valor: ${valorAseguradora})`
+              );
+            } else {
+              console.log(
+                `     ⚪ Aseguradora "${datosDelPaciente.aseguradora}" no reconocida, dejando por defecto`
+              );
+            }
+          }
+        } catch (error) {
+          console.log(`     ⚠️ Error con aseguradora: ${error.message}`);
+        }
+      }
+
+      // Marcar checkbox de privacidad específico
+      console.log("   📝 Marcando checkbox de privacidad...");
+
+      try {
+        const elemento = await paginaDriCloud.$(
+          "input#chkAceptarPoliticaPrivacidad2"
+        );
+
+        if (elemento) {
+          const esVisible = await elemento.isVisible();
+          const esHabilitado = await elemento.isEnabled();
+          const estaMarcado = await elemento.isChecked();
+
+          console.log(
+            `     📊 Checkbox - Visible: ${esVisible}, Habilitado: ${esHabilitado}, Marcado: ${estaMarcado}`
+          );
+
+          if (esVisible && esHabilitado && !estaMarcado) {
+            console.log(`     ✅ Marcando checkbox de privacidad`);
+            await elemento.check();
+            console.log(`     ✅ Checkbox marcado correctamente`);
+          } else if (estaMarcado) {
+            console.log(`     ✅ Checkbox ya estaba marcado`);
+          }
+        } else {
+          console.log(
+            `     ❌ No se encontró checkbox con ID: chkAceptarPoliticaPrivacidad2`
+          );
+        }
+      } catch (error) {
+        console.log(`     ⚠️ Error con checkbox: ${error.message}`);
+      }
+
+      // Manejar género (select) - priorizando sección de nuevo paciente
+      if (datosDelPaciente.genero) {
+        console.log(`   📝 Seleccionando género: "${datosDelPaciente.genero}"`);
+        try {
+          const selectoresGenero = [
+            'div:has-text("Detalles de nuevo paciente") select[name*="genero" i]',
+            'div:has-text("nuevo paciente") select[name*="sexo" i]',
+            'div:has-text("nuevo paciente") ~ * select[id*="genero" i]',
+            'select[name*="genero" i]:nth-last-of-type(1)',
+            'select[name*="sexo" i]:nth-last-of-type(1)',
+            'select[id*="genero" i]:nth-last-of-type(1)',
+            'select[name*="genero" i]',
+            'select[name*="sexo" i]',
+            'select[id*="genero" i]',
+          ];
+
+          let generoSeleccionado = false;
+          for (const selector of selectoresGenero) {
+            try {
+              const elementos = await paginaDriCloud.$$(selector);
+
+              // Priorizar último select encontrado (nuevo paciente)
+              for (let i = elementos.length - 1; i >= 0; i--) {
+                const elemento = elementos[i];
+                if (elemento && (await elemento.isVisible())) {
+                  await elemento.selectOption({
+                    label: datosDelPaciente.genero,
+                  });
+                  console.log(
+                    `     ✅ Género seleccionado: ${selector} (elemento ${
+                      i + 1
+                    })`
+                  );
+                  generoSeleccionado = true;
+                  break;
+                }
+              }
+
+              if (generoSeleccionado) break;
+            } catch (error) {
+              console.log(`     ⚪ Género no disponible: ${selector}`);
+            }
+          }
+
+          if (!generoSeleccionado) {
+            console.log("     ❌ No se pudo seleccionar género");
+          }
+        } catch (error) {
+          console.log("   ⚠️  Error seleccionando género:", error.message);
+        }
+      }
+
+      // Marcar checkbox de política de privacidad - priorizando sección de nuevo paciente
+      console.log("   📝 Marcando política de privacidad...");
+      try {
+        const selectoresCheckbox = [
+          'div:has-text("Detalles de nuevo paciente") input[type="checkbox"]:not(:checked)',
+          'div:has-text("nuevo paciente") input[name*="privacidad" i]:not(:checked)',
+          'div:has-text("nuevo paciente") ~ * input[name*="politica" i]:not(:checked)',
+          'div:has-text("nuevo paciente") ~ * input[name*="acepto" i]:not(:checked)',
+          'input[type="checkbox"]:not(:checked):nth-last-of-type(1)',
+          'input[type="checkbox"]:not(:checked):nth-last-of-type(2)',
+          'input[name*="privacidad" i]:not(:checked):nth-last-of-type(1)',
+          'input[name*="politica" i]:not(:checked):nth-last-of-type(1)',
+          'input[name*="acepto" i]:not(:checked):nth-last-of-type(1)',
+          'input[name*="terminos" i]:not(:checked):nth-last-of-type(1)',
+          'input[type="checkbox"]:not(:checked)',
+          'input[name*="privacidad" i]:not(:checked)',
+          'input[name*="politica" i]:not(:checked)',
+          'input[name*="acepto" i]:not(:checked)',
+          'input[name*="terminos" i]:not(:checked)',
+        ];
+
+        let checkboxMarcado = false;
+        for (const selector of selectoresCheckbox) {
+          try {
+            const elementos = await paginaDriCloud.$$(selector);
+
+            // Priorizar último checkbox encontrado (nuevo paciente)
+            for (let i = elementos.length - 1; i >= 0; i--) {
+              const elemento = elementos[i];
+              try {
+                const esVisible = await elemento.isVisible();
+                const esHabilitado = await elemento.isEnabled();
+
+                if (esVisible && esHabilitado) {
+                  await elemento.check();
+                  console.log(
+                    `     ✅ Checkbox marcado: ${selector} (elemento ${i + 1})`
+                  );
+                  checkboxMarcado = true;
+                  break;
+                }
+              } catch (error) {
+                console.log(
+                  `     ⚪ Error checkbox elemento ${i + 1}: ${error.message}`
+                );
+              }
+            }
+
+            if (checkboxMarcado) break;
+          } catch (error) {
+            console.log(`     ⚪ Checkbox no disponible: ${selector}`);
+          }
+        }
+
+        if (!checkboxMarcado) {
+          console.log("     ⚠️  No se encontró checkbox de privacidad");
+        }
+      } catch (error) {
+        console.log("   ⚠️  Error marcando checkbox:", error.message);
+      }
+
+      console.log("");
+      console.log("✅ Formulario de NUEVO paciente completado");
+      console.log(
+        "🔍 Los datos se han rellenado priorizando la sección inferior del formulario"
+      );
+    } catch (error) {
+      console.log(
+        "⚠️  Error rellenando formulario del nuevo paciente:",
+        error.message
+      );
+    }
+
+    // Actualizar notificación de estado
+    await paginaDriCloud.evaluate(() => {
+      const notif = document.getElementById("estado-automatizacion");
+      if (notif) {
+        notif.innerHTML =
+          "✅ FORMULARIO RELLENADO<br><small>NO se presionará ningún botón automáticamente</small>";
+        notif.style.background = "linear-gradient(45deg, #27ae60, #2ecc71)";
+      }
+    });
+
+    // Capturas finales
+    console.log("");
+    console.log("📸 Generando capturas del resultado...");
+    try {
+      await paginaFormulario.screenshot({
+        path: "formulario-datos-enviados.png",
+        fullPage: true,
+      });
+      await paginaDriCloud.screenshot({
+        path: "dricloud-formulario-completado.png",
+        fullPage: true,
+      });
+      console.log("✅ Capturas guardadas correctamente");
+    } catch (error) {
+      console.log("⚠️  Error generando capturas:", error.message);
+    }
+
+    console.log("");
+    console.log("🎊 ¡FORMULARIO RELLENADO COMPLETAMENTE!");
+    console.log("======================================");
+    console.log("");
+    console.log("📋 Proceso realizado:");
+    console.log("   ✅ Formulario de datos procesado correctamente");
+    console.log("   ✅ Conexión a DriCloud establecida");
+    console.log("   ✅ Servicio médico seleccionado");
+    console.log("   ✅ Profesional (Dr. Fernando) seleccionado");
+    console.log("   ✅ Fecha y hora configuradas");
+    console.log("   ✅ Formulario del NUEVO paciente rellenado");
+    console.log("");
+    console.log("🔒 IMPORTANTE - EL SCRIPT SE DETIENE AQUÍ:");
+    console.log("   ✅ NO se ha hecho clic en ningún botón de continuar");
+    console.log("   🛑 NO se ha hecho clic en el botón 'Continuar'");
+    console.log("   🔍 Los datos están rellenados pero NO enviados");
+    console.log("   👆 Puedes revisar y decidir manualmente qué hacer");
+    console.log("");
+    console.log("📷 Archivos generados:");
+    console.log("   - formulario-datos-enviados.png (tus datos introducidos)");
+    console.log(
+      "   - dricloud-formulario-completado.png (formulario rellenado)"
+    );
+    console.log("");
+    console.log("🔄 VENTANAS PERMANENTES:");
+    console.log("   ⚠️  Las ventanas permanecerán ABIERTAS");
+    console.log("   👆 Puedes revisar y decidir si reservar manualmente");
+    console.log("   🔚 Cierra el navegador cuando termines de revisar");
+
+    // Mantener abierto hasta que se cierre el navegador manualmente
+    console.log("");
+    console.log(
+      "🔄 Modo permanente activado - Esperando hasta que cierres el navegador..."
+    );
+
+    await new Promise((resolve) => {
+      browser.on("disconnected", () => {
+        console.log("🔚 Navegador cerrado por el usuario - Script finalizado");
+        resolve();
+      });
+    });
+  } catch (error) {
+    console.error("❌ Error general en la automatización:", error.message);
+    console.log("");
+    console.log("🔄 Manteniendo ventanas abiertas a pesar del error...");
+
+    try {
+      await new Promise((resolve) => {
+        browser.on("disconnected", () => {
+          console.log("🔚 Script finalizado");
+          resolve();
+        });
+      });
+    } catch (finalError) {
+      console.log("🔚 Finalizando script");
+    }
+  }
+}
+
+if (require.main === module) {
+  driCloudURLCorrecta().catch(console.error);
+}
+
+module.exports = { driCloudURLCorrecta };
