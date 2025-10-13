@@ -19,7 +19,6 @@ export interface IStorage {
   getAppointmentsByDate(date: Date): Promise<AppointmentWithDoctor[]>;
   getAppointmentsByDoctor(doctorId: string): Promise<AppointmentWithDoctor[]>;
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
-  updateAppointment(id: string, appointment: Partial<Appointment>): Promise<Appointment | undefined>;
   cancelAppointment(id: string): Promise<boolean>;
 }
 
@@ -212,16 +211,6 @@ export class MemStorage implements IStorage {
     }
     
     return appointment;
-  }
-
-  async updateAppointment(id: string, updates: Partial<Appointment>): Promise<Appointment | undefined> {
-    const appointment = this.appointments.get(id);
-    if (appointment) {
-      const updatedAppointment: Appointment = { ...appointment, ...updates };
-      this.appointments.set(id, updatedAppointment);
-      return updatedAppointment;
-    }
-    return undefined;
   }
 
   async cancelAppointment(id: string): Promise<boolean> {
