@@ -32,7 +32,8 @@ interface AppointmentBookingProps {
 }
 
 export default function AppointmentBooking({ doctors }: AppointmentBookingProps) {
-  const [currentStep, setCurrentStep] = useState<'calendar' | 'form' | 'confirmation' | 'modify' | 'cancel'>('calendar');
+  const [currentView, setCurrentView] = useState<'booking' | 'modify' | 'cancel'>('booking');
+  const [currentStep, setCurrentStep] = useState<'calendar' | 'form' | 'confirmation'>('calendar');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | undefined>();
   const [patientData, setPatientData] = useState<PatientData | undefined>();
@@ -188,110 +189,133 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
           />
         );
 
-      case 'modify':
-        return (
-          <ModifyAppointment
-            onBack={() => setCurrentStep('calendar')}
-          />
-        );
-
-      case 'cancel':
-        return (
-          <CancelAppointment
-            onBack={() => setCurrentStep('calendar')}
-          />
-        );
 
       default:
         return null;
     }
   };
 
+  // Renderizar contenido según la vista actual
+  const renderMainContent = () => {
+    if (currentView === 'modify') {
+      return (
+        <ModifyAppointment
+          onBack={() => setCurrentView('booking')}
+        />
+      );
+    }
+    
+    if (currentView === 'cancel') {
+      return (
+        <CancelAppointment
+          onBack={() => setCurrentView('booking')}
+        />
+      );
+    }
+    
+    // Vista de reserva (booking)
+    return (
+      <>
+        {/* Progress Steps */}
+        {currentView === 'booking' && (
+          <Card>
+            <CardHeader>
+              <div className="space-y-4">
+                <Progress value={progress} className="w-full" data-testid="progress-booking" />
+                
+                <div className="grid grid-cols-3 gap-4">
+                  {steps.map((step, index) => {
+                    const StepIcon = step.icon;
+                    const isActive = currentStep === step.key;
+                    const isCompleted = index < currentStepIndex;
+                    
+                    return (
+                      <div
+                        key={step.key}
+                        className={`flex items-center space-x-2 p-2 rounded-lg text-sm ${
+                          isActive 
+                            ? 'bg-primary text-primary-foreground' 
+                            : isCompleted 
+                            ? 'bg-success/20 text-success' 
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                        data-testid={`step-${step.key}`}
+                      >
+                        <StepIcon className="h-4 w-4" />
+                        <span className="hidden sm:inline">{step.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+        )}
+
+        {/* Back Navigation */}
+        {currentStep !== 'calendar' && currentView === 'booking' && (
+          <div className="flex justify-start">
+            <Button
+              variant="outline"
+              onClick={currentStep === 'form' ? handleBackToCalendar : handleBackToForm}
+              className="flex items-center space-x-2"
+              data-testid="button-back"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Volver</span>
+            </Button>
+          </div>
+        )}
+
+        {/* Step Content */}
+        <div className="min-h-[600px]">
+          {renderStepContent()}
+        </div>
+      </>
+    );
+  };
+
   return (
     <div className="w-full max-w-7xl mx-auto space-y-6">
-      {/* Header with Progress */}
+      {/* Header with Navigation Buttons */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between mb-4">
             <CardTitle className="text-2xl font-bold text-primary">
               CitaFacil
             </CardTitle>
-            <div className="flex gap-2">
-              <button 
-                className="px-4 py-2 bg-primary text-primary-foreground rounded-md text-sm font-medium hover-elevate active-elevate-2"
-                onClick={() => setCurrentStep('calendar')}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={currentView === 'booking' ? 'default' : 'outline'}
+                onClick={() => {
+                  setCurrentView('booking');
+                  setCurrentStep('calendar');
+                }}
                 data-testid="button-reserva-cita"
               >
                 Reserva Cita
-              </button>
-              <button 
-                className="px-4 py-2 bg-secondary text-secondary-foreground rounded-md text-sm font-medium hover-elevate active-elevate-2"
-                onClick={() => setCurrentStep('modify')}
+              </Button>
+              <Button
+                variant={currentView === 'modify' ? 'default' : 'outline'}
+                onClick={() => setCurrentView('modify')}
                 data-testid="button-modifica-cita"
               >
                 Modifica Cita
-              </button>
-              <button 
-                className="px-4 py-2 bg-destructive text-destructive-foreground rounded-md text-sm font-medium hover-elevate active-elevate-2"
-                onClick={() => setCurrentStep('cancel')}
+              </Button>
+              <Button
+                variant={currentView === 'cancel' ? 'default' : 'outline'}
+                onClick={() => setCurrentView('cancel')}
                 data-testid="button-cancela-cita"
               >
                 Cancela Cita
-              </button>
-            </div>
-          </div>
-
-          {/* Progress Steps */}
-          <div className="space-y-4">
-            <Progress value={progress} className="w-full" data-testid="progress-booking" />
-            
-            <div className="grid grid-cols-3 gap-4">
-              {steps.map((step, index) => {
-                const StepIcon = step.icon;
-                const isActive = currentStep === step.key;
-                const isCompleted = index < currentStepIndex;
-                
-                return (
-                  <div
-                    key={step.key}
-                    className={`flex items-center space-x-2 p-2 rounded-lg text-sm ${
-                      isActive 
-                        ? 'bg-primary text-primary-foreground' 
-                        : isCompleted 
-                        ? 'bg-success/20 text-success' 
-                        : 'bg-muted text-muted-foreground'
-                    }`}
-                    data-testid={`step-${step.key}`}
-                  >
-                    <StepIcon className="h-4 w-4" />
-                    <span className="hidden sm:inline">{step.label}</span>
-                  </div>
-                );
-              })}
+              </Button>
             </div>
           </div>
         </CardHeader>
       </Card>
 
-      {/* Back Navigation */}
-      {currentStep !== 'calendar' && (
-        <div className="flex justify-start">
-          <Button
-            variant="outline"
-            onClick={currentStep === 'form' ? handleBackToCalendar : handleBackToForm}
-            className="flex items-center space-x-2"
-            data-testid="button-back"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span>Volver</span>
-          </Button>
-        </div>
-      )}
-
       {/* Main Content */}
-      <div className="min-h-[600px]">
-        {renderStepContent()}
-      </div>
+      {renderMainContent()}
 
       {/* Footer */}
       <Card>

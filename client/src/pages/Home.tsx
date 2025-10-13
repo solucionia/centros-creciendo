@@ -1,25 +1,16 @@
 import AppointmentBooking from "@/components/AppointmentBooking";
-import { useQuery } from "@tanstack/react-query";
+import { useDriCloudDoctors } from "@/hooks/use-dricloud";
 import type { Doctor } from "@shared/schema";
 
 export default function Home() {
-  const { data: doctors, isLoading, error } = useQuery({
-    queryKey: ['/api/doctors'],
-    queryFn: async (): Promise<Doctor[]> => {
-      const response = await fetch('/api/doctors');
-      if (!response.ok) {
-        throw new Error('Failed to fetch doctors');
-      }
-      return response.json();
-    },
-  });
+  const { data: doctors, isLoading, error } = useDriCloudDoctors();
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
-          <p className="text-muted-foreground">Cargando médicos...</p>
+          <p className="text-muted-foreground">Conectando con DriCloud...</p>
         </div>
       </div>
     );
@@ -29,8 +20,16 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-red-600">Error al cargar los médicos</p>
-          <p className="text-sm text-muted-foreground">Por favor, intenta recargar la página</p>
+          <p className="text-destructive font-semibold">Error al conectar con DriCloud</p>
+          <p className="text-sm text-muted-foreground">
+            {error instanceof Error ? error.message : 'Error desconocido'}
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover-elevate active-elevate-2"
+          >
+            Reintentar
+          </button>
         </div>
       </div>
     );

@@ -3,8 +3,11 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertDoctorSchema, insertAppointmentSchema } from "@shared/schema";
 import { z } from "zod";
+import { registerDriCloudRoutes } from "./routes/dricloud.routes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Registrar rutas de DriCloud
+  registerDriCloudRoutes(app);
   // Doctor routes
   app.get('/api/doctors', async (req, res) => {
     try {
