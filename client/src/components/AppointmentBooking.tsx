@@ -11,6 +11,7 @@ import PatientForm from "./PatientForm";
 import AppointmentConfirmation from "./AppointmentConfirmation";
 import ModifyAppointment from "./ModifyAppointment";
 import CancelAppointment from "./CancelAppointment";
+import { DemoModeBanner } from "./DemoModeBanner";
 import type { Doctor, InsertAppointment } from "@shared/schema";
 
 interface SelectedSlot {
@@ -313,6 +314,9 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
           </div>
         </CardHeader>
       </Card>
+
+      {/* Demo Mode Banner */}
+      <DemoModeBanner />
 
       {/* Main Content */}
       {renderMainContent()}
