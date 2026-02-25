@@ -6,54 +6,45 @@ CitaFacil es un sistema integral de reserva de citas médicas integrado con DriC
 
 ## Estado Actual del Sistema
 
-### ✅ **Completado e Implementado:**
+### ✅ **Completado y Funcionando:**
 
-1. **Interfaz de Usuario:**
+1. **Conexión DriCloud en Producción:**
+   - Autenticación exitosa (`"Successful":true`) con token real de DriCloud
+   - URL correcta: `https://apidricloud.dricloud.net/Dricloud_creciendomirasierra_20627620/api/APIWeb/`
+   - 8 doctores reales cargando desde DriCloud
+   - 11 especialidades derivadas de los datos de los doctores
+   - `isDemoMode: false` — sistema operando con datos reales
+
+2. **Doctores Reales de Centro Creciendo Mirasierra:**
+   - Dra. Gema Tesorero Carcedo — Pediatría
+   - Dra. María Cormenzana Carpio — Pediatría
+   - Dr. Javier Hernández Calvín — Otorrinolaringología
+   - Dr. Marcial Sanchez Potenciano — Otorrinolaringología
+   - Dr. Fernando Mera — Otorrinolaringología
+   - Dra. Miriam de la Puente Yagüe — Ginecología
+   - Maria Loreto Carrasco Santos — Dermatología
+   - Monica Gonzalez Rincon — Matrona y Lactancia
+
+3. **Interfaz de Usuario:**
    - Sistema de 3 botones principales: Reserva Cita, Modifica Cita, Cancela Cita
    - Calendario interactivo para selección de citas
    - Formulario de datos del paciente
    - Sistema de confirmación de citas
    - Diseño responsivo con tema turquesa
 
-2. **Integración DriCloud API v2 (reconstruida desde documentación oficial):**
-   - Autenticación con MD5 hash: `MD5(userName + MD5(password) + timeSpan + salt)`
-   - Estructura de respuesta correcta: `{ Successful, Data: { USU_APITOKEN, ... } }`
-   - Gestión automática de tokens (cache de 23 horas)
-   - `DriCloudSubscriptionError` tipado para distinguir errores de suscripción
-   - Endpoints implementados según docs API v2:
-     - `GetEspecialidades` → `/api/dricloud/specialties`
-     - `GetDoctores` → `/api/dricloud/doctors`
-     - `GetAgendaDisponibilidad` → `/api/dricloud/availability`
-     - `PostCitaPaciente` → `POST /api/dricloud/appointments`
-     - `PostUpdateCitaPaciente` → `PUT /api/dricloud/appointments/:id`
-     - `PostDeleteCitaPaciente` → `POST /api/dricloud/appointments/:id/cancel`
-     - `GetPacientePorNombreTelefono` / `PostCreatePaciente` → búsqueda/creación automática
-     - `GetCitasByNIF` → `GET /api/dricloud/appointments?nif=X`
-     - `GetPacientesPorTelefono` → `GET /api/dricloud/patients?telefono=X`
+4. **Integración DriCloud API v2:**
+   - Autenticación: `MD5(userName + MD5(password) + timeSpanString + salt)` en MAYÚSCULAS
+   - timeSpanString en zona horaria `Europe/Madrid` (DriCloud valida contra reloj español)
+   - `idClinica: 20627` (5 dígitos, no 8) en el body del login
+   - URL de clínica: `Dricloud_creciendomirasierra_20627620` (con capitalización exacta)
+   - Mutex de login para evitar tokens paralelos que se invalidan entre sí
+   - Token cacheado 23 horas
+   - Fallback automático a modo demo si la suscripción no está activa
 
-3. **Modo Demostración:**
-   - Sistema de datos de demostración (mock data) funcional
-   - Detección automática de `DriCloudSubscriptionError` en cualquier nivel (login/API)
-   - Fallback transparente a datos demo cuando DriCloud no está disponible
-   - Banner informativo visible para indicar modo demostración
-
-### ⚠️ **Bloqueador Actual:**
-
-**Suscripción DriCloud WebAPI No Activa**
-
-**Error devuelto por DriCloud:** `"Error. Suscripción a WebAPI no activa."`
-
-**Comportamiento actual:**
-- ✅ Código de autenticación correcto (hash MD5, estructura `Data.USU_APITOKEN`)
-- ✅ DriCloud rechaza el login devolviendo `Successful: false` (problema de cuenta)
-- ✅ Sistema detecta el error y usa datos demo automáticamente
-- ❌ Requiere activación de suscripción WebAPI en panel DriCloud
-
-**Acción Requerida:**
-1. Acceder al panel DriCloud como administrador de la clínica
-2. Ir a: **Sistemas → Suscripción**
-3. Activar la suscripción WebAPI
-4. Una vez activada, el sistema automáticamente usará datos reales sin cambiar código
+5. **Modo Demostración (fallback):**
+   - Sistema de datos de demostración funcional si DriCloud no responde
+   - Banner informativo visible en modo demo
+   - Botón de reconexión
 
 ## Arquitectura del Sistema
 
@@ -68,30 +59,38 @@ CitaFacil es un sistema integral de reserva de citas médicas integrado con DriC
 ### Backend (Express + TypeScript)
 - **Framework**: Express.js
 - **Storage**: In-memory storage (MemStorage)
-- **DriCloud Integration**: Autenticación MD5, cache de tokens, mapeo de datos, fallback a mock data
+- **DriCloud Integration**: Autenticación MD5, mutex de login, cache de tokens, mapeo de datos
 
 ### Integración DriCloud
 
 **Archivos Clave:**
-- `server/dricloud/auth.ts` — Autenticación, gestión de tokens, `DriCloudSubscriptionError`
-- `server/dricloud/services.ts` — Todos los servicios de API DriCloud
+- `server/dricloud/auth.ts` — Autenticación MD5, mutex, gestión de tokens, `DriCloudSubscriptionError`
+- `server/dricloud/services.ts` — Servicios de API DriCloud con extracción de claves reales
 - `server/dricloud/mapper.ts` — Mapeo de datos entre sistemas
 - `server/dricloud/mock-data.ts` — Datos de demostración
-- `server/routes/dricloud.routes.ts` — Rutas de API con fallback automático
-- `client/src/hooks/use-dricloud.ts` — Hooks de React para DriCloud
+- `server/routes/dricloud.routes.ts` — Rutas API, categorización de doctores, mapa ESP_ID→nombre
 
 ### Credenciales Configuradas (Secrets)
-- `DRICLOUD_URL_CLINICA` = `dricloud_creciendomirasierra`
-- `DRICLOUD_CLINICA_ID` = `20627620`
-- `DRICLOUD_API_PASSWORD` — contraseña de API configurada
+- `DRICLOUD_URL_CLINICA` = `Dricloud_creciendomirasierra_20627620` (segmento URL completo)
+- `DRICLOUD_CLINICA_ID` = `20627` (idClinica del body del login — 5 dígitos)
+- `DRICLOUD_API_PASSWORD` — contraseña del usuario WebAPI
 - `SESSION_SECRET` — secreto de sesión Express
+
+### Detalles Técnicos Críticos
+- **MD5 en MAYÚSCULAS**: `crypto.createHash('md5').update(input,'utf8').digest('hex').toUpperCase()`
+- **timeSpanString**: `Intl.DateTimeFormat('es-ES', {timeZone: 'Europe/Madrid', ...}).formatToParts()`
+- **URL de clínica**: `Dricloud_creciendomirasierra_20627620` (D mayúscula, no d minúscula)
+- **idClinica**: `20627` (sin los últimos 3 dígitos del segmento URL)
+- **GetDoctores**: devuelve `Data.Doctores[]` (no `Data[]` directamente)
+- **GetEspecialidades**: devuelve `Data.Especialidades[]` — vacío para esta clínica, se deriva de doctores
+- **Mutex de login**: evita que llamadas paralelas generen tokens que se invalidan mutuamente
 
 ## Endpoints API Internos
 
 | Método | Ruta | Descripción |
 |--------|------|-------------|
 | GET | `/api/dricloud/status` | Estado de conexión (demo o real) |
-| GET | `/api/dricloud/diagnostico` | Diagnóstico raw DriCloud |
+| GET | `/api/dricloud/diagnostico` | Diagnóstico de conexión DriCloud |
 | POST | `/api/dricloud/refresh` | Fuerza reconexión limpiando caché |
 | GET | `/api/dricloud/specialties` | Lista de especialidades |
 | GET | `/api/dricloud/doctors?especialidadId=X` | Lista de doctores |
@@ -102,37 +101,16 @@ CitaFacil es un sistema integral de reserva de citas médicas integrado con DriC
 | GET | `/api/dricloud/appointments?nif=X` | Citas de un paciente |
 | GET | `/api/dricloud/patients?telefono=X` | Buscar pacientes |
 
-## Sistema de Fallback
-
+## Mapa de Especialidades (ESP_ID → Nombre)
 ```
-Llamada a DriCloud API
-↓
-Login → { Successful: false } ?
-├─ SÍ → DriCloudSubscriptionError → Usar mock data + mostrar banner
-└─ NO → Token cacheado 23h → Llamada a endpoint
-         ↓
-         { Successful: false } ?
-         ├─ SÍ → DriCloudSubscriptionError → Usar mock data
-         └─ NO → Retornar data.Data (datos reales)
+5  → Pediatría
+4  → Ginecología
+19 → Otorrinolaringología
+41 → Otorrinolaringología
+11 → Dermatología
+30, 45, 23 → Matrona y Lactancia
+8, 44, 53  → Medicina General
 ```
-
-## Datos de Demostración
-
-### Especialidades Demo:
-- Medicina General, Pediatría, Cardiología, Dermatología, Psicología
-
-### Doctores Demo:
-1. Dra. María García López — Medicina General
-2. Dr. Carlos Rodríguez Sánchez — Pediatría
-3. Dra. Ana Martínez Fernández — Cardiología
-4. Dr. Luis González Pérez — Dermatología
-5. Dra. Elena Torres Ruiz — Psicología
-6. Dr. Javier Hernández Castro — Medicina General/Cardiología
-
-### Horarios Demo:
-- Lunes a Viernes: 9:00–13:00, 16:00–19:00 (lun–jue tarde)
-- Sábado: 9:00–13:00
-- Domingo: Cerrado
 
 ## Configuración de Desarrollo
 
@@ -143,4 +121,4 @@ npm run dev   # Servidor en http://localhost:5000
 ---
 
 **Última actualización:** 25 de febrero, 2026
-**Estado:** Sistema funcional en modo demostración. Código listo para datos reales cuando se active la suscripción WebAPI en DriCloud.
+**Estado:** Sistema en producción con datos reales de DriCloud. 8 doctores y 11 especialidades cargando desde la API real.

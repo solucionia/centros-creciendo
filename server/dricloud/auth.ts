@@ -7,10 +7,12 @@ export class DriCloudSubscriptionError extends Error {
     this.name = 'DriCloudSubscriptionError';
   }
   isSubscriptionError(): boolean {
-    return this.message.toLowerCase().includes('suscripci') ||
-           this.message.toLowerCase().includes('subscription') ||
-           this.message.toLowerCase().includes('clinic id not found') ||
-           this.message.toLowerCase().includes('no found');
+    const msg = this.message.toLowerCase();
+    return msg.includes('suscripci') ||
+           msg.includes('subscription') ||
+           msg.includes('clinic id not found') ||
+           msg.includes('no found') ||
+           msg.includes('token incorrecto');
   }
 }
 
@@ -42,11 +44,13 @@ export interface DriCloudResponse<T> {
   ErrorMessage: string | null;
 }
 
-// ─── Caché del token ──────────────────────────────────────────────────────────
+// ─── Caché del token — con mutex para evitar logins paralelos ─────────────────
 let tokenCache: { token: string; expiresAt: number } | null = null;
+let loginInProgress: Promise<string> | null = null;
 
 export function clearTokenCache(): void {
   tokenCache = null;
+  loginInProgress = null;
   console.log('[DriCloud] Token cache limpiado');
 }
 
@@ -55,7 +59,7 @@ export function getClinicaApiUrl(): string {
   return `${DRICLOUD_CONFIG.baseUrl}/${DRICLOUD_CONFIG.urlClinica}/api/APIWeb`;
 }
 
-// ─── Generación del hash MD5 en MAYÚSCULAS (idéntico al script Postman oficial) ─
+// ─── MD5 en MAYÚSCULAS (idéntico al script Postman oficial) ──────────────────
 // Script Postman: CryptoJS.MD5(str).toString(CryptoJS.enc.Hex).toUpperCase()
 function md5(input: string): string {
   return crypto.createHash('md5').update(input, 'utf8').digest('hex').toUpperCase();
@@ -67,23 +71,25 @@ function generateHash(userName: string, password: string, timeSpan: string, salt
   return md5(combined);
 }
 
-// ─── Login ────────────────────────────────────────────────────────────────────
-export async function getDriCloudToken(): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now()) {
-    return tokenCache.token;
-  }
-
-  // timeSpanString: exactamente como en el script Postman oficial
-  // const date = new Date(); pad(date.getHours()); ... (sin conversión de zona horaria)
+// ─── Login con mutex: solo un login paralelo a la vez ────────────────────────
+async function doLogin(): Promise<string> {
+  // timeSpanString en hora de España (Europe/Madrid) — DriCloud valida contra su reloj
   const now = new Date();
-  const pad = (n: number) => n < 10 ? '0' + n : String(n);
+  const parts = new Intl.DateTimeFormat('es-ES', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? '00';
   const timeSpanString =
-    now.getFullYear().toString() +
-    pad(now.getMonth() + 1) +
-    pad(now.getDate()) +
-    pad(now.getHours()) +
-    pad(now.getMinutes()) +
-    pad(now.getSeconds());
+    get('year') +
+    get('month') +
+    get('day') +
+    get('hour') +
+    get('minute') +
+    get('second');
 
   const hash = generateHash(
     DRICLOUD_CONFIG.userName,
@@ -93,7 +99,6 @@ export async function getDriCloudToken(): Promise<string> {
   );
 
   const loginUrl = `${getClinicaApiUrl()}/LoginExternalHash`;
-
   console.log(`[DriCloud] Login → ${loginUrl}`);
   console.log(`[DriCloud] timeSpan=${timeSpanString}, idClinica=${DRICLOUD_CONFIG.clinicaId}`);
 
@@ -112,7 +117,6 @@ export async function getDriCloudToken(): Promise<string> {
     throw new DriCloudSubscriptionError(`Login HTTP error: ${response.status} ${response.statusText}`);
   }
 
-  // Estructura real: { Successful, Data: { USU_APITOKEN, URL, ... } }
   const body: DriCloudResponse<DriCloudLoginData> = await response.json();
   console.log('[DriCloud] Respuesta login:', JSON.stringify(body).substring(0, 200));
 
@@ -125,6 +129,21 @@ export async function getDriCloudToken(): Promise<string> {
   tokenCache = { token, expiresAt: Date.now() + 23 * 60 * 60 * 1000 };
   console.log('[DriCloud] ✅ Login exitoso, token cacheado');
   return token;
+}
+
+export async function getDriCloudToken(): Promise<string> {
+  if (tokenCache && tokenCache.expiresAt > Date.now()) {
+    return tokenCache.token;
+  }
+
+  // Si ya hay un login en curso, esperar el mismo en vez de lanzar otro
+  if (!loginInProgress) {
+    loginInProgress = doLogin().finally(() => {
+      loginInProgress = null;
+    });
+  }
+
+  return loginInProgress;
 }
 
 // ─── Petición autenticada a DriCloud ─────────────────────────────────────────

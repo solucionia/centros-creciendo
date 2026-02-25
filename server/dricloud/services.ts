@@ -109,16 +109,29 @@ export async function getSociedades(): Promise<DriCloudSociedad[]> {
 
 // ─── Especialidades ───────────────────────────────────────────────────────────
 export async function getEspecialidades(cliId?: number): Promise<DriCloudEspecialidad[]> {
-  return driCloudRequest<DriCloudEspecialidad[]>('GetEspecialidades', {
-    CLI_ID: cliId ?? DRICLOUD_CONFIG.clinicaId,
-  });
+  // Intento 1: con CLI_ID
+  const body: Record<string, unknown> = {};
+  if (cliId !== undefined) body.CLI_ID = cliId;
+
+  const data = await driCloudRequest<{ Especialidades?: DriCloudEspecialidad[] } | DriCloudEspecialidad[]>('GetEspecialidades', body);
+  if (Array.isArray(data)) return data;
+  const list = (data as any).Especialidades;
+  if (Array.isArray(list)) return list;
+
+  // Intento 2: sin filtro (algunos setups de DriCloud no usan CLI_ID en especialidades)
+  const data2 = await driCloudRequest<{ Especialidades?: DriCloudEspecialidad[] } | DriCloudEspecialidad[]>('GetEspecialidades', {});
+  if (Array.isArray(data2)) return data2;
+  return (data2 as any).Especialidades ?? [];
 }
 
 // ─── Doctores ─────────────────────────────────────────────────────────────────
 export async function getDoctores(espId?: number): Promise<DriCloudDoctor[]> {
   const body: Record<string, unknown> = {};
   if (espId !== undefined) body.ESP_ID = espId;
-  return driCloudRequest<DriCloudDoctor[]>('GetDoctores', body);
+  // DriCloud devuelve { Doctores: [...] } en Data
+  const data = await driCloudRequest<{ Doctores?: DriCloudDoctor[] } | DriCloudDoctor[]>('GetDoctores', body);
+  if (Array.isArray(data)) return data;
+  return (data as any).Doctores ?? [];
 }
 
 // ─── Disponibilidad de agenda ─────────────────────────────────────────────────

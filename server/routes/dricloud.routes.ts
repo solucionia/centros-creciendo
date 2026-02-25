@@ -42,6 +42,69 @@ function isSubscriptionErr(err: unknown): boolean {
   return false;
 }
 
+/**
+ * Mapa de ESP_ID conocidos de la clínica Creciendo Mirasierra → nombre de especialidad
+ * Derivado del campo CITA_ONLINE_MAS_INFO de los doctores reales
+ */
+const ESP_ID_NAMES: Record<number, string> = {
+  5: 'Pediatría',
+  4: 'Ginecología',
+  19: 'Otorrinolaringología',
+  41: 'Otorrinolaringología',
+  11: 'Dermatología',
+  30: 'Matrona y Lactancia',
+  45: 'Matrona y Lactancia',
+  23: 'Matrona y Lactancia',
+  8: 'Medicina General',
+  44: 'Medicina General',
+  53: 'Medicina General',
+};
+
+/**
+ * Extrae texto plano de HTML (elimina etiquetas y decodifica entidades básicas)
+ */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&aacute;/g, 'á').replace(/&eacute;/g, 'é')
+    .replace(/&iacute;/g, 'í').replace(/&oacute;/g, 'ó')
+    .replace(/&uacute;/g, 'ú').replace(/&ntilde;/g, 'ñ')
+    .replace(/&Ntilde;/g, 'Ñ').replace(/&Aacute;/g, 'Á')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Intenta derivar el nombre de una especialidad dado su ESP_ID y datos del doctor.
+ */
+function deriveSpecialtyName(espId: number, _doc: any): string {
+  return ESP_ID_NAMES[espId] ?? `Especialidad ${espId}`;
+}
+
+/**
+ * Categoriza un doctor en 'pediatric' | 'adult' | 'family' según sus ESP_IDs
+ */
+function categorizeDoctor(especialidadIds: number[], infoHtml?: string): 'pediatric' | 'adult' | 'family' {
+  const nombres = especialidadIds.map(id => ESP_ID_NAMES[id] ?? '').join(' ').toLowerCase();
+  const info = stripHtml(infoHtml ?? '').toLowerCase();
+  const combined = nombres + ' ' + info;
+
+  // Doctores que atienden a adultos Y niños se clasifican como 'adult'
+  if (combined.includes('adultos y niños') || combined.includes('adultos y ni')) {
+    return 'adult';
+  }
+  // Especialidades claramente pediátricas
+  if (combined.includes('pediatr') || combined.includes('neonat') ||
+      combined.includes('matrona') || combined.includes('lactancia')) {
+    return 'pediatric';
+  }
+  if (combined.includes('famil') || combined.includes('medicina general')) {
+    return 'family';
+  }
+  return 'adult';
+}
+
 /** Cabeceras que evitan que el navegador/proxy cachée respuestas de la API */
 function noCache(_req: any, res: any, next: any) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -78,11 +141,13 @@ export function registerDriCloudRoutes(app: Express) {
   app.get('/api/dricloud/diagnostico', async (_req, res) => {
     try {
       clearTokenCache();
+      const doctores = await getDoctores();
       const especialidades = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
       res.json({
         estado: 'OK',
+        doctoresObtenidos: doctores.length,
         especialidadesObtenidas: especialidades.length,
-        endpointUsado: `${getClinicaApiUrl()}/GetEspecialidades`,
+        endpointUsado: `${getClinicaApiUrl()}/GetDoctores`,
       });
     } catch (err: any) {
       res.json({
@@ -113,8 +178,30 @@ export function registerDriCloudRoutes(app: Express) {
   /** GET /api/dricloud/specialties */
   app.get('/api/dricloud/specialties', async (_req, res) => {
     try {
-      const data = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
-      console.log(`[DriCloud] ✅ ${data.length} especialidades reales`);
+      // Primero intentamos GetEspecialidades; si devuelve vacío derivamos
+      // las especialidades reales desde los doctores (que sí llevan ListadoESPECIALIDAD).
+      let data = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+
+      if (!data || data.length === 0) {
+        // Fallback: derivar especialidades únicas de los ESP_IDs de los doctores
+        const doctores = await getDoctores();
+        const espMap = new Map<number, { ESP_ID: number; ESP_NOMBRE: string; ListadoTIPO_CITA: [] }>();
+        for (const doc of doctores) {
+          for (const e of doc.ListadoESPECIALIDAD) {
+            const id = (e as any).ESP_ID;
+            if (!id || espMap.has(id)) continue;
+            // Intentar obtener nombre del campo de información adicional del doctor
+            // Si no está disponible, usar el nombre descriptivo de la especialidad conocida
+            const nombre = deriveSpecialtyName(id, doc);
+            espMap.set(id, { ESP_ID: id, ESP_NOMBRE: nombre, ListadoTIPO_CITA: [] });
+          }
+        }
+        data = Array.from(espMap.values()) as any;
+        console.log(`[DriCloud] ✅ ${data.length} especialidades derivadas de doctores`);
+      } else {
+        console.log(`[DriCloud] ✅ ${data.length} especialidades reales`);
+      }
+
       res.json(data);
     } catch (err) {
       if (isSubscriptionErr(err)) {
@@ -139,11 +226,27 @@ export function registerDriCloudRoutes(app: Express) {
         getDoctores(espId),
       ]);
 
-      const mapped = doctores.map(doc => ({
-        id: doc.USU_ID.toString(),
-        driCloudId: doc.USU_ID,
-        ...mapDriCloudDoctor(doc, especialidades),
-      }));
+      const mapped = doctores
+        .filter(doc => {
+          // Excluir el registro de la clínica (no es un médico real)
+          const info = stripHtml(doc.CITA_ONLINE_MAS_INFO ?? '').toLowerCase();
+          return !info.includes('entorno de pruebas') && !info.includes('no acepta citas');
+        })
+        .map(doc => {
+          const espIds = doc.ListadoESPECIALIDAD.map((e: any) => e.ESP_ID);
+          const specialty = categorizeDoctor(espIds, doc.CITA_ONLINE_MAS_INFO);
+          const mapped = mapDriCloudDoctor(doc, especialidades);
+          return {
+            id: doc.USU_ID.toString(),
+            driCloudId: doc.USU_ID,
+            ...mapped,
+            specialty, // sobreescribir con categorización mejorada
+            especialidadIds: espIds,
+            especialidadPrincipalId: espIds[0] ?? null,
+            especialidadNombre: ESP_ID_NAMES[espIds[0]] ?? null,
+            infoAdicional: stripHtml(doc.CITA_ONLINE_MAS_INFO ?? ''),
+          };
+        });
       console.log(`[DriCloud] ✅ ${mapped.length} doctores reales`);
       res.json(mapped);
     } catch (err) {
