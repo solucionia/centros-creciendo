@@ -21,7 +21,7 @@ import {
   parseDisponibilidad,
   splitFullName,
 } from '../dricloud/mapper';
-import { DRICLOUD_CONFIG, clearTokenCache, DriCloudSubscriptionError } from '../dricloud/auth';
+import { DRICLOUD_CONFIG, clearTokenCache, DriCloudSubscriptionError, getClinicaApiUrl } from '../dricloud/auth';
 import {
   mockEspecialidades,
   mockDoctores,
@@ -82,13 +82,13 @@ export function registerDriCloudRoutes(app: Express) {
       res.json({
         estado: 'OK',
         especialidadesObtenidas: especialidades.length,
-        endpointUsado: `${DRICLOUD_CONFIG.baseUrl}/${DRICLOUD_CONFIG.urlClinica}/api/APIWeb/GetEspecialidades`,
+        endpointUsado: `${getClinicaApiUrl()}/GetEspecialidades`,
       });
     } catch (err: any) {
       res.json({
         estado: 'ERROR',
         mensaje: err.message,
-        endpointUsado: `${DRICLOUD_CONFIG.baseUrl}/${DRICLOUD_CONFIG.urlClinica}/api/APIWeb/GetEspecialidades`,
+        endpointUsado: `${getClinicaApiUrl()}/GetEspecialidades`,
       });
     }
   });

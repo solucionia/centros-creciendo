@@ -1,18 +1,23 @@
 import crypto from 'crypto';
 
 // ─── Error especial para suscripción inactiva ─────────────────────────────────
-// Definido primero para que esté disponible en todo el módulo
 export class DriCloudSubscriptionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'DriCloudSubscriptionError';
   }
   isSubscriptionError(): boolean {
-    return this.message.toLowerCase().includes('suscripci');
+    return this.message.toLowerCase().includes('suscripci') ||
+           this.message.toLowerCase().includes('subscription') ||
+           this.message.toLowerCase().includes('clinic id not found') ||
+           this.message.toLowerCase().includes('no found');
   }
 }
 
-// ─── Configuración (leída desde variables de entorno/secretos) ────────────────
+// ─── Configuración desde secretos de entorno ──────────────────────────────────
+// DRICLOUD_URL_CLINICA  → segmento de URL completo, ej: "Dricloud_creciendomirasierra_20627620"
+// DRICLOUD_CLINICA_ID  → idClinica para el body del login, ej: "20627"
+// DRICLOUD_API_PASSWORD → contraseña del usuario WebAPI
 export const DRICLOUD_CONFIG = {
   baseUrl: 'https://apidricloud.dricloud.net',
   urlClinica: process.env.DRICLOUD_URL_CLINICA || '',
@@ -30,7 +35,7 @@ interface DriCloudLoginData {
   USU_APITOKEN: string;
 }
 
-interface DriCloudResponse<T> {
+export interface DriCloudResponse<T> {
   Successful: boolean;
   Html: string | null;
   Data: T;
@@ -45,15 +50,21 @@ export function clearTokenCache(): void {
   console.log('[DriCloud] Token cache limpiado');
 }
 
-// ─── Generación del hash MD5 (mismo algoritmo que el ejemplo C# oficial) ─────
+/** URL base de la API de la clínica */
+export function getClinicaApiUrl(): string {
+  return `${DRICLOUD_CONFIG.baseUrl}/${DRICLOUD_CONFIG.urlClinica}/api/APIWeb`;
+}
+
+// ─── Generación del hash MD5 en MAYÚSCULAS (idéntico al script Postman oficial) ─
+// Script Postman: CryptoJS.MD5(str).toString(CryptoJS.enc.Hex).toUpperCase()
 function md5(input: string): string {
-  return crypto.createHash('md5').update(input, 'utf8').digest('hex');
+  return crypto.createHash('md5').update(input, 'utf8').digest('hex').toUpperCase();
 }
 
 function generateHash(userName: string, password: string, timeSpan: string, salt: string): string {
-  const passwordMd5 = md5(password);                         // MD5(password)
-  const combined = userName + passwordMd5 + timeSpan + salt; // concatenar
-  return md5(combined);                                       // MD5 final
+  const passwordMd5 = md5(password);
+  const combined = userName + passwordMd5 + timeSpan + salt;
+  return md5(combined);
 }
 
 // ─── Login ────────────────────────────────────────────────────────────────────
@@ -62,12 +73,17 @@ export async function getDriCloudToken(): Promise<string> {
     return tokenCache.token;
   }
 
-  // timeSpanString en hora de España peninsular (UTC+1/UTC+2 según DST)
+  // timeSpanString: exactamente como en el script Postman oficial
+  // const date = new Date(); pad(date.getHours()); ... (sin conversión de zona horaria)
   const now = new Date();
-  const timeSpanString = now
-    .toLocaleString('sv-SE', { timeZone: 'Europe/Madrid' }) // "2025-10-13 07:04:52"
-    .replace(/[-: ]/g, '')                                   // "20251013070452"
-    .substring(0, 14);
+  const pad = (n: number) => n < 10 ? '0' + n : String(n);
+  const timeSpanString =
+    now.getFullYear().toString() +
+    pad(now.getMonth() + 1) +
+    pad(now.getDate()) +
+    pad(now.getHours()) +
+    pad(now.getMinutes()) +
+    pad(now.getSeconds());
 
   const hash = generateHash(
     DRICLOUD_CONFIG.userName,
@@ -76,7 +92,10 @@ export async function getDriCloudToken(): Promise<string> {
     DRICLOUD_CONFIG.salt
   );
 
-  const loginUrl = `${DRICLOUD_CONFIG.baseUrl}/${DRICLOUD_CONFIG.urlClinica}/api/APIWeb/LoginExternalHash`;
+  const loginUrl = `${getClinicaApiUrl()}/LoginExternalHash`;
+
+  console.log(`[DriCloud] Login → ${loginUrl}`);
+  console.log(`[DriCloud] timeSpan=${timeSpanString}, idClinica=${DRICLOUD_CONFIG.clinicaId}`);
 
   const response = await fetch(loginUrl, {
     method: 'POST',
@@ -90,15 +109,15 @@ export async function getDriCloudToken(): Promise<string> {
   });
 
   if (!response.ok) {
-    throw new Error(`[DriCloud] Login HTTP error: ${response.status} ${response.statusText}`);
+    throw new DriCloudSubscriptionError(`Login HTTP error: ${response.status} ${response.statusText}`);
   }
 
-  // Estructura real de la respuesta: { Successful, Data: { USU_APITOKEN, URL, ... } }
+  // Estructura real: { Successful, Data: { USU_APITOKEN, URL, ... } }
   const body: DriCloudResponse<DriCloudLoginData> = await response.json();
+  console.log('[DriCloud] Respuesta login:', JSON.stringify(body).substring(0, 200));
 
   if (!body.Successful || !body.Data?.USU_APITOKEN) {
     const msg = body.Html || body.ErrorMessage || 'Error desconocido en login';
-    // Lanzar como DriCloudSubscriptionError para que el fallback demo funcione
     throw new DriCloudSubscriptionError(`Login: ${msg}`);
   }
 
@@ -114,7 +133,7 @@ export async function driCloudRequest<T>(
   body?: Record<string, unknown>
 ): Promise<T> {
   const token = await getDriCloudToken();
-  const url = `${DRICLOUD_CONFIG.baseUrl}/${DRICLOUD_CONFIG.urlClinica}/api/APIWeb/${endpoint}`;
+  const url = `${getClinicaApiUrl()}/${endpoint}`;
 
   const response = await fetch(url, {
     method: 'POST',
@@ -128,7 +147,7 @@ export async function driCloudRequest<T>(
   if (!response.ok) {
     const text = await response.text();
     console.error(`[DriCloud] Error HTTP en ${endpoint}:`, text);
-    throw new Error(`[DriCloud] HTTP ${response.status} en ${endpoint}`);
+    throw new DriCloudSubscriptionError(`HTTP ${response.status} en ${endpoint}`);
   }
 
   const data: DriCloudResponse<T> = await response.json();
