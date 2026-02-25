@@ -15,21 +15,25 @@ CitaFacil es un sistema integral de reserva de citas médicas integrado con DriC
    - Sistema de confirmación de citas
    - Diseño responsivo con tema turquesa
 
-2. **Integración DriCloud API:**
-   - Sistema de autenticación con MD5 hash
+2. **Integración DriCloud API v2 (reconstruida desde documentación oficial):**
+   - Autenticación con MD5 hash: `MD5(userName + MD5(password) + timeSpan + salt)`
+   - Estructura de respuesta correcta: `{ Successful, Data: { USU_APITOKEN, ... } }`
    - Gestión automática de tokens (cache de 23 horas)
-   - Endpoints de integración implementados:
-     - `GET /api/dricloud/doctors` - Obtiene médicos
-     - `GET /api/dricloud/specialties` - Obtiene especialidades
-     - `GET /api/dricloud/availability` - Obtiene disponibilidad de agenda
-     - `POST /api/dricloud/appointments` - Crea citas
-     - `POST /api/dricloud/appointments/:id/cancel` - Cancela citas
-   - Búsqueda y creación automática de pacientes en DriCloud
-   - Mapeo de datos entre CitaFacil y DriCloud
+   - `DriCloudSubscriptionError` tipado para distinguir errores de suscripción
+   - Endpoints implementados según docs API v2:
+     - `GetEspecialidades` → `/api/dricloud/specialties`
+     - `GetDoctores` → `/api/dricloud/doctors`
+     - `GetAgendaDisponibilidad` → `/api/dricloud/availability`
+     - `PostCitaPaciente` → `POST /api/dricloud/appointments`
+     - `PostUpdateCitaPaciente` → `PUT /api/dricloud/appointments/:id`
+     - `PostDeleteCitaPaciente` → `POST /api/dricloud/appointments/:id/cancel`
+     - `GetPacientePorNombreTelefono` / `PostCreatePaciente` → búsqueda/creación automática
+     - `GetCitasByNIF` → `GET /api/dricloud/appointments?nif=X`
+     - `GetPacientesPorTelefono` → `GET /api/dricloud/patients?telefono=X`
 
 3. **Modo Demostración:**
    - Sistema de datos de demostración (mock data) funcional
-   - Detección automática de error de suscripción DriCloud
+   - Detección automática de `DriCloudSubscriptionError` en cualquier nivel (login/API)
    - Fallback transparente a datos demo cuando DriCloud no está disponible
    - Banner informativo visible para indicar modo demostración
 
@@ -37,19 +41,19 @@ CitaFacil es un sistema integral de reserva de citas médicas integrado con DriC
 
 **Suscripción DriCloud WebAPI No Activa**
 
-**Error:** `"Error. Suscripción a WebAPI no activa."`
+**Error devuelto por DriCloud:** `"Error. Suscripción a WebAPI no activa."`
 
-**Estado:**
-- ✅ Autenticación DriCloud funciona correctamente
-- ✅ Token se genera y cachea exitosamente
-- ❌ Endpoints de datos bloqueados por falta de suscripción
-- ✅ Sistema funciona en modo demostración mientras tanto
+**Comportamiento actual:**
+- ✅ Código de autenticación correcto (hash MD5, estructura `Data.USU_APITOKEN`)
+- ✅ DriCloud rechaza el login devolviendo `Successful: false` (problema de cuenta)
+- ✅ Sistema detecta el error y usa datos demo automáticamente
+- ❌ Requiere activación de suscripción WebAPI en panel DriCloud
 
 **Acción Requerida:**
-1. Contactar soporte técnico DriCloud
-2. Solicitar activación de suscripción WebAPI
-3. Proporcionar Clínica ID: `dricloud_creciendomirasierra_20627620`
-4. Una vez activada, el sistema automáticamente usará datos reales
+1. Acceder al panel DriCloud como administrador de la clínica
+2. Ir a: **Sistemas → Suscripción**
+3. Activar la suscripción WebAPI
+4. Una vez activada, el sistema automáticamente usará datos reales sin cambiar código
 
 ## Arquitectura del Sistema
 
@@ -64,145 +68,79 @@ CitaFacil es un sistema integral de reserva de citas médicas integrado con DriC
 ### Backend (Express + TypeScript)
 - **Framework**: Express.js
 - **Storage**: In-memory storage (MemStorage)
-- **DriCloud Integration**: 
-  - Autenticación MD5
-  - Cache de tokens
-  - Mapeo de datos
-  - Sistema de fallback a mock data
+- **DriCloud Integration**: Autenticación MD5, cache de tokens, mapeo de datos, fallback a mock data
 
 ### Integración DriCloud
 
 **Archivos Clave:**
-- `server/dricloud/auth.ts` - Autenticación y gestión de tokens
-- `server/dricloud/services.ts` - Servicios de API DriCloud
-- `server/dricloud/mapper.ts` - Mapeo de datos entre sistemas
-- `server/dricloud/mock-data.ts` - Datos de demostración
-- `server/routes/dricloud.routes.ts` - Rutas de API
-- `client/src/hooks/use-dricloud.ts` - Hooks de React para DriCloud
+- `server/dricloud/auth.ts` — Autenticación, gestión de tokens, `DriCloudSubscriptionError`
+- `server/dricloud/services.ts` — Todos los servicios de API DriCloud
+- `server/dricloud/mapper.ts` — Mapeo de datos entre sistemas
+- `server/dricloud/mock-data.ts` — Datos de demostración
+- `server/routes/dricloud.routes.ts` — Rutas de API con fallback automático
+- `client/src/hooks/use-dricloud.ts` — Hooks de React para DriCloud
 
 ### Credenciales Configuradas (Secrets)
-- `DRICLOUD_URL_CLINICA` - URL de la clínica en DriCloud
-- `DRICLOUD_CLINICA_ID` - ID de la clínica
-- `DRICLOUD_API_PASSWORD` - Contraseña de API
-- `SESSION_SECRET` - Secreto de sesión Express
+- `DRICLOUD_URL_CLINICA` = `dricloud_creciendomirasierra`
+- `DRICLOUD_CLINICA_ID` = `20627620`
+- `DRICLOUD_API_PASSWORD` — contraseña de API configurada
+- `SESSION_SECRET` — secreto de sesión Express
 
-## Funcionalidades Implementadas
+## Endpoints API Internos
 
-### 1. Reserva de Citas
-- Selección de especialidad médica
-- Filtrado de doctores por especialidad
-- Calendario interactivo con disponibilidad
-- Formulario de datos del paciente
-- Confirmación de cita
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/dricloud/status` | Estado de conexión (demo o real) |
+| GET | `/api/dricloud/diagnostico` | Diagnóstico raw DriCloud |
+| POST | `/api/dricloud/refresh` | Fuerza reconexión limpiando caché |
+| GET | `/api/dricloud/specialties` | Lista de especialidades |
+| GET | `/api/dricloud/doctors?especialidadId=X` | Lista de doctores |
+| GET | `/api/dricloud/availability?doctorId=X&fecha=yyyyMMdd` | Disponibilidad |
+| POST | `/api/dricloud/appointments` | Crear cita |
+| PUT | `/api/dricloud/appointments/:id` | Modificar cita |
+| POST | `/api/dricloud/appointments/:id/cancel` | Cancelar cita |
+| GET | `/api/dricloud/appointments?nif=X` | Citas de un paciente |
+| GET | `/api/dricloud/patients?telefono=X` | Buscar pacientes |
 
-### 2. Modificación de Citas
-- Búsqueda de citas por email
-- Interfaz para cambiar fecha/hora
-- Actualización en DriCloud (cuando esté activo)
+## Sistema de Fallback
 
-### 3. Cancelación de Citas
-- Búsqueda de citas por email
-- Confirmación de cancelación
-- Sincronización con DriCloud (cuando esté activo)
+```
+Llamada a DriCloud API
+↓
+Login → { Successful: false } ?
+├─ SÍ → DriCloudSubscriptionError → Usar mock data + mostrar banner
+└─ NO → Token cacheado 23h → Llamada a endpoint
+         ↓
+         { Successful: false } ?
+         ├─ SÍ → DriCloudSubscriptionError → Usar mock data
+         └─ NO → Retornar data.Data (datos reales)
+```
 
 ## Datos de Demostración
 
-Mientras la suscripción DriCloud no esté activa, el sistema utiliza:
-
 ### Especialidades Demo:
-- Medicina General
-- Pediatría
-- Cardiología
-- Dermatología
-- Psicología
+- Medicina General, Pediatría, Cardiología, Dermatología, Psicología
 
 ### Doctores Demo:
-1. Dra. María García López - Medicina General
-2. Dr. Carlos Rodríguez Sánchez - Pediatría
-3. Dra. Ana Martínez Fernández - Cardiología
-4. Dr. Luis González Pérez - Dermatología
-5. Dra. Elena Torres Ruiz - Psicología
-6. Dr. Javier Hernández Castro - Medicina General/Cardiología
+1. Dra. María García López — Medicina General
+2. Dr. Carlos Rodríguez Sánchez — Pediatría
+3. Dra. Ana Martínez Fernández — Cardiología
+4. Dr. Luis González Pérez — Dermatología
+5. Dra. Elena Torres Ruiz — Psicología
+6. Dr. Javier Hernández Castro — Medicina General/Cardiología
 
 ### Horarios Demo:
-- Lunes a Viernes: 9:00-13:00, 16:00-19:00 (lunes a jueves tarde)
-- Sábado: 9:00-13:00
+- Lunes a Viernes: 9:00–13:00, 16:00–19:00 (lun–jue tarde)
+- Sábado: 9:00–13:00
 - Domingo: Cerrado
-
-## Flujo de Trabajo
-
-### Proceso de Reserva:
-1. Usuario selecciona "Reserva Cita"
-2. Elige especialidad (opcional)
-3. Selecciona doctor del listado
-4. Escoge fecha y hora disponible en calendario
-5. Completa formulario de datos personales
-6. Confirma la cita
-7. Sistema intenta guardar en DriCloud (o modo demo)
-
-### Sistema de Fallback:
-```
-Intento de conexión DriCloud
-↓
-¿Suscripción activa?
-├─ SÍ → Usar datos reales de DriCloud
-└─ NO → Usar datos de demostración + Mostrar banner
-```
-
-## Próximos Pasos
-
-### Para Activar Integración Completa:
-1. **Activar Suscripción DriCloud:**
-   - Contactar: Soporte técnico DriCloud
-   - Solicitar: Activación de suscripción WebAPI
-   - Proporcionar: Clínica ID `dricloud_creciendomirasierra_20627620`
-
-2. **Verificación Post-Activación:**
-   ```bash
-   # Probar endpoint de doctores
-   curl http://localhost:5000/api/dricloud/doctors
-   
-   # Verificar logs
-   # Debe mostrar: "✅ Doctores reales obtenidos: X"
-   ```
-
-3. **Transición Automática:**
-   - No requiere cambios de código
-   - Banner de demo desaparecerá automáticamente
-   - Datos reales se cargarán transparentemente
-
-## Documentación Adicional
-
-- **Estado de Integración**: Ver `DRICLOUD_INTEGRATION_STATUS.md`
-- **Arquitectura DriCloud**: Ver archivos en `server/dricloud/`
-- **Componentes UI**: Ver archivos en `client/src/components/`
 
 ## Configuración de Desarrollo
 
-### Variables de Entorno Necesarias:
-- `DRICLOUD_URL_CLINICA` - URL base de DriCloud
-- `DRICLOUD_CLINICA_ID` - ID de la clínica
-- `DRICLOUD_API_PASSWORD` - Contraseña de API
-- `SESSION_SECRET` - Secreto para sesiones Express
-
-### Comandos:
 ```bash
-# Iniciar desarrollo
-npm run dev
-
-# Servidor corre en: http://localhost:5000
+npm run dev   # Servidor en http://localhost:5000
 ```
-
-## Contacto y Soporte
-
-**CitaFacil**
-- Email: info@citafacil.com
-- Teléfono: +57 (1) 123-4567
-
-**Soporte DriCloud**
-- Activar suscripción WebAPI para Clínica ID: dricloud_creciendomirasierra_20627620
 
 ---
 
-**Última actualización:** 13 de octubre, 2025  
-**Estado:** Sistema funcional en modo demostración, esperando activación de suscripción DriCloud WebAPI
+**Última actualización:** 25 de febrero, 2026
+**Estado:** Sistema funcional en modo demostración. Código listo para datos reales cuando se active la suscripción WebAPI en DriCloud.

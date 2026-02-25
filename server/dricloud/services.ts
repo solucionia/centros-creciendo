@@ -1,6 +1,7 @@
 import { driCloudRequest, DRICLOUD_CONFIG } from './auth';
 
-// Interfaces para DriCloud
+// ─── Tipos según documentación DriCloud API v2 ────────────────────────────────
+
 export interface DriCloudClinica {
   CLI_ID: number;
   CLI_NOMBRE: string;
@@ -9,17 +10,28 @@ export interface DriCloudClinica {
   CLI_MAIL: string;
 }
 
-export interface DriCloudEspecialidad {
-  ESP_ID: number;
-  ESP_NOMBRE: string;
-  ListadoTIPO_CITA: DriCloudTipoCita[];
+export interface DriCloudDespacho {
+  DES_ID: number;
+  DES_NOMBRE: string;
+  CLI_ID: number;
+}
+
+export interface DriCloudSociedad {
+  SOC_ID: number;
+  SOC_NOMBRE: string;
 }
 
 export interface DriCloudTipoCita {
   TCI_ID: number;
   TCI_NOMBRE: string;
   TCI_MINUTOS_CITA: number;
-  ImportePrivado: number;
+  ImportePrivado?: number;
+}
+
+export interface DriCloudEspecialidad {
+  ESP_ID: number;
+  ESP_NOMBRE: string;
+  ListadoTIPO_CITA: DriCloudTipoCita[];
 }
 
 export interface DriCloudDoctor {
@@ -40,146 +52,192 @@ export interface DriCloudPaciente {
   PAC_APELLIDOS: string;
   PAC_FECHA_NACIMIENTO: string;
   PAC_TELEFONO1: string;
-  PAC_SEXO_ID: number;
+  PAC_SEXO_ID: number; // 0=Sin determinar, 1=Femenino, 2=Masculino
   PAC_NIF?: string;
-  PAC_EMAIL: string;
+  PAC_EMAIL?: string;
+  PAC_PASAPORTE?: string;
   PAC_SOC_ID?: number;
+  PAC_TRAT_DATOS?: boolean;
+  PAC_PROMOCIONES?: boolean;
   PAC_IDIOMA?: string;
   PAC_NACIONALIDAD?: string;
   PAC_DIRECCION?: string;
   PAC_POBLACION?: string;
   PAC_COD_POSTAL?: string;
   PAC_PAIS?: string;
+  PAC_FAC_TUTOR_APELLIDOS?: string;
+  PAC_FAC_TUTOR_NOMBRE?: string;
+  PAC_FAC_TUTOR_NIF?: string;
+  TCC_ID?: number;
 }
 
 export interface DriCloudDisponibilidad {
-  Disponibilidad: string[]; // Formato: "yyyyMMddHHmm:<MinCita>:<DES_ID>"
+  Disponibilidad: string[]; // "yyyyMMddHHmm:<MinCita>:<DES_ID>"
 }
 
-export interface DriCloudCitaResponse {
+export interface DriCloudCita {
   CPA_ID: number;
+  CPA_FECHA_INICIO: string; // yyyyMMddHHmm
+  CPA_FECHA_FIN: string;
+  PAC_ID?: number;
+  PAC_NHC?: string;
+  USU_ID: number;
+  USU_NOMBRE_COMPLETO?: string;
+  CLI_ID?: number;
+  CLI_NOMBRE?: string;
+  PAC_NOMBRE?: string;
+  PAC_APELLIDOS?: string;
+  PAC_TELEFONO1?: string;
 }
 
-/**
- * Obtiene las clínicas de DriCloud
- */
+// ─── Clínicas ─────────────────────────────────────────────────────────────────
 export async function getClinicas(): Promise<DriCloudClinica[]> {
   return driCloudRequest<DriCloudClinica[]>('GetClinicas');
 }
 
-/**
- * Obtiene las especialidades de DriCloud
- */
+// ─── Despachos ────────────────────────────────────────────────────────────────
+export async function getDespachos(cliId?: number): Promise<DriCloudDespacho[]> {
+  return driCloudRequest<DriCloudDespacho[]>('GetDespachos', {
+    CLI_ID: cliId ?? DRICLOUD_CONFIG.clinicaId,
+  });
+}
+
+// ─── Sociedades ───────────────────────────────────────────────────────────────
+export async function getSociedades(): Promise<DriCloudSociedad[]> {
+  return driCloudRequest<DriCloudSociedad[]>('GetSociedades');
+}
+
+// ─── Especialidades ───────────────────────────────────────────────────────────
 export async function getEspecialidades(cliId?: number): Promise<DriCloudEspecialidad[]> {
-  return driCloudRequest<DriCloudEspecialidad[]>('GetEspecialidades', 'POST', {
-    CLI_ID: cliId || DRICLOUD_CONFIG.clinicaId
+  return driCloudRequest<DriCloudEspecialidad[]>('GetEspecialidades', {
+    CLI_ID: cliId ?? DRICLOUD_CONFIG.clinicaId,
   });
 }
 
-/**
- * Obtiene los doctores de DriCloud
- */
+// ─── Doctores ─────────────────────────────────────────────────────────────────
 export async function getDoctores(espId?: number): Promise<DriCloudDoctor[]> {
-  return driCloudRequest<DriCloudDoctor[]>('GetDoctores', 'POST', {
-    ESP_ID: espId
-  });
+  const body: Record<string, unknown> = {};
+  if (espId !== undefined) body.ESP_ID = espId;
+  return driCloudRequest<DriCloudDoctor[]>('GetDoctores', body);
 }
 
-/**
- * Obtiene la disponibilidad de agenda de un doctor
- */
-export async function getAgendaDisponibilidad(
-  usuId: number,
-  fecha: string, // formato yyyyMMdd
-  desId?: number,
-  cliId?: number,
-  espId?: number,
-  tciId?: number,
-  diasRecuperar: number = 7
-): Promise<DriCloudDisponibilidad> {
-  return driCloudRequest<DriCloudDisponibilidad>('GetAgendaDisponibilidad', 'POST', {
-    USU_ID: usuId,
-    fecha: fecha,
-    DES_ID: desId,
-    CLI_ID: cliId || DRICLOUD_CONFIG.clinicaId,
-    ESP_ID: espId,
-    TCI_ID: tciId,
-    diasRecuperar: diasRecuperar
-  });
+// ─── Disponibilidad de agenda ─────────────────────────────────────────────────
+export async function getAgendaDisponibilidad(params: {
+  usuId?: number;
+  listUsuIds?: number[];
+  fecha: string;           // yyyyMMdd
+  desId?: number;
+  cliId?: number;
+  espId?: number;
+  tciId?: number;
+  diasRecuperar?: number;  // 1–31, default 7
+  socId?: number;
+}): Promise<DriCloudDisponibilidad> {
+  const body: Record<string, unknown> = {
+    fecha: params.fecha,
+    diasRecuperar: params.diasRecuperar ?? 7,
+    CLI_ID: params.cliId ?? DRICLOUD_CONFIG.clinicaId,
+  };
+  if (params.usuId !== undefined) body.USU_ID = params.usuId;
+  if (params.listUsuIds) body.List_USU_ID = params.listUsuIds;
+  if (params.desId !== undefined) body.DES_ID = params.desId;
+  if (params.espId !== undefined) body.ESP_ID = params.espId;
+  if (params.tciId !== undefined) body.TCI_ID = params.tciId;
+  if (params.socId !== undefined) body.SOC_ID = params.socId;
+  return driCloudRequest<DriCloudDisponibilidad>('GetAgendaDisponibilidad', body);
 }
 
-/**
- * Busca un paciente por teléfono
- */
-export async function getPacientesPorTelefono(telefono: string): Promise<{ Pacientes: DriCloudPaciente[] }> {
-  return driCloudRequest('GetPacientesPorTelefono', 'POST', { telefono });
+// ─── Pacientes ────────────────────────────────────────────────────────────────
+export async function getPacienteByNIF(
+  nif: string
+): Promise<{ Exists: boolean; Paciente: DriCloudPaciente }> {
+  return driCloudRequest('GetPacienteByNIF', { id: nif });
 }
 
-/**
- * Busca un paciente por nombre, apellidos y teléfono
- */
+export async function getPacientesPorTelefono(
+  telefono: string
+): Promise<{ Pacientes: DriCloudPaciente[] }> {
+  return driCloudRequest('GetPacientesPorTelefono', { telefono });
+}
+
 export async function getPacientePorNombreTelefono(
   nombre: string,
   apellidos: string,
   telefono: string
 ): Promise<{ Exists: boolean; Paciente: DriCloudPaciente }> {
-  return driCloudRequest('GetPacientePorNombreTelefono', 'POST', {
-    nombre,
-    apellidos,
-    telefono
-  });
+  return driCloudRequest('GetPacientePorNombreTelefono', { nombre, apellidos, telefono });
 }
 
-/**
- * Crea un nuevo paciente en DriCloud
- */
-export async function createPaciente(paciente: Partial<DriCloudPaciente>): Promise<{ PAC_ID: number }> {
-  return driCloudRequest('PostCreatePaciente', 'POST', { paciente });
+export async function createPaciente(
+  paciente: Omit<DriCloudPaciente, 'PAC_ID'>
+): Promise<{ PAC_ID: number }> {
+  return driCloudRequest('PostCreatePaciente', { paciente });
 }
 
-/**
- * Crea una cita en DriCloud
- */
-export async function createCita(
-  usuId: number,
-  fechaInicioCitaString: string, // formato yyyyMMddHHmm
-  pacId: number,
-  tciId?: number,
-  desId?: number,
-  cliId?: number,
-  observaciones?: string
-): Promise<DriCloudCitaResponse> {
-  return driCloudRequest('PostCitaPaciente', 'POST', {
-    USU_ID: usuId,
-    fechaInicioCitaString: fechaInicioCitaString,
-    PAC_ID: pacId,
-    TCI_ID: tciId,
-    DES_ID: desId,
-    CLI_ID: cliId || DRICLOUD_CONFIG.clinicaId,
-    observaciones: observaciones
-  });
+// ─── Citas ────────────────────────────────────────────────────────────────────
+export async function createCita(params: {
+  usuId: number;
+  fechaInicioCitaString: string; // yyyyMMddHHmm
+  pacId: number;
+  tciId?: number;
+  desId?: number;
+  cliId?: number;
+  observaciones?: string;
+}): Promise<{ CPA_ID: number }> {
+  const body: Record<string, unknown> = {
+    USU_ID: params.usuId,
+    fechaInicioCitaString: params.fechaInicioCitaString,
+    PAC_ID: params.pacId,
+    CLI_ID: params.cliId ?? DRICLOUD_CONFIG.clinicaId,
+  };
+  if (params.tciId !== undefined) body.TCI_ID = params.tciId;
+  if (params.desId !== undefined) body.DES_ID = params.desId;
+  if (params.observaciones) body.observaciones = params.observaciones;
+  return driCloudRequest('PostCitaPaciente', body);
 }
 
-/**
- * Cancela una cita en DriCloud
- */
-export async function cancelCita(cpaId: number): Promise<{ success: boolean }> {
-  return driCloudRequest('PostDeleteCitaPaciente', 'POST', {
-    CPA_ID: cpaId
-  });
+export async function updateCita(params: {
+  cpaId: number;
+  fechaInicioCitaString: string; // yyyyMMddHHmm
+  minutos?: number;
+}): Promise<{ CPA_ID: number }> {
+  const body: Record<string, unknown> = {
+    CPA_ID: params.cpaId,
+    fechaInicioCitaString: params.fechaInicioCitaString,
+  };
+  if (params.minutos !== undefined) body.minutos = params.minutos;
+  return driCloudRequest('PostUpdateCitaPaciente', body);
 }
 
-/**
- * Modifica una cita en DriCloud
- */
-export async function updateCita(
-  cpaId: number,
-  fechaInicioCitaString: string,
-  minutos?: number
-): Promise<{ success: boolean }> {
-  return driCloudRequest('PostUpdateCitaPaciente', 'POST', {
-    CPA_ID: cpaId,
-    fechaInicioCitaString: fechaInicioCitaString,
-    minutos: minutos
-  });
+export async function deleteCita(cpaId: number): Promise<{ CPA_ID: number }> {
+  return driCloudRequest('PostDeleteCitaPaciente', { CPA_ID: cpaId });
+}
+
+export async function getCitasByNIF(params: {
+  nif: string;
+  fechaInicioString?: string; // yyyyMMdd
+  fechaFinString?: string;    // yyyyMMdd
+  usuId?: number;
+}): Promise<DriCloudCita[]> {
+  const body: Record<string, unknown> = { id: params.nif };
+  if (params.fechaInicioString) body.fechaInicioString = params.fechaInicioString;
+  if (params.fechaFinString) body.fechaFinString = params.fechaFinString;
+  if (params.usuId !== undefined) body.USU_ID = params.usuId;
+  return driCloudRequest<DriCloudCita[]>('GetPacienteCitasByNIF', body);
+}
+
+export async function getCitasPacientes(params: {
+  fecha: string; // yyyyMMdd
+  usuId?: number;
+  pacId?: number;
+  diasRecuperar?: number;
+}): Promise<DriCloudCita[]> {
+  const body: Record<string, unknown> = {
+    fecha: params.fecha,
+    diasRecuperar: params.diasRecuperar ?? 1,
+    buscarPorFechaModificacion: false,
+  };
+  if (params.usuId !== undefined) body.USU_ID = params.usuId;
+  if (params.pacId !== undefined) body.PAC_ID = params.pacId;
+  return driCloudRequest<DriCloudCita[]>('GetCitasPacientes', body);
 }
