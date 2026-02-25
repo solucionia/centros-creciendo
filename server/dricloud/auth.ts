@@ -21,6 +21,14 @@ const DRICLOUD_CONFIG = {
 let tokenCache: { token: string; expiresAt: number } | null = null;
 
 /**
+ * Limpia el token cacheado para forzar un nuevo login
+ */
+export function clearTokenCache(): void {
+  tokenCache = null;
+  console.log('[DriCloud] Token cache limpiado, se forzará nuevo login');
+}
+
+/**
  * Genera el hash MD5 requerido por DriCloud para autenticación
  */
 function generateHash(userName: string, password: string, timeSpan: string, salt: string): string {

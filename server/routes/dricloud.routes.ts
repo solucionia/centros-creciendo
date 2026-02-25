@@ -15,7 +15,7 @@ import {
   parseDisponibilidad,
   splitFullName
 } from '../dricloud/mapper';
-import { DRICLOUD_CONFIG } from '../dricloud/auth';
+import { DRICLOUD_CONFIG, clearTokenCache } from '../dricloud/auth';
 import {
   mockEspecialidades,
   mockDoctores,
@@ -40,8 +40,74 @@ function isSubscriptionError(data: any): boolean {
   return false;
 }
 
+// Middleware para deshabilitar caché en todos los endpoints DriCloud
+function noCache(req: any, res: any, next: any) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+}
+
 export function registerDriCloudRoutes(app: Express) {
-  
+
+  // Aplicar no-cache a todas las rutas DriCloud
+  app.use('/api/dricloud', noCache);
+
+  /**
+   * GET /api/dricloud/diagnostico
+   * Devuelve la respuesta RAW de DriCloud para diagnóstico
+   */
+  app.get('/api/dricloud/diagnostico', async (req, res) => {
+    try {
+      clearTokenCache();
+      const rawEspecialidades = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      res.json({
+        configuracion: {
+          urlClinica: DRICLOUD_CONFIG.urlClinica,
+          clinicaId: DRICLOUD_CONFIG.clinicaId,
+          endpointUsado: `https://apidricloud.dricloud.net/${DRICLOUD_CONFIG.urlClinica}/api/APIWeb/GetEspecialidades`,
+        },
+        respuestaDriCloud: rawEspecialidades,
+        interpretacion: isSubscriptionError(rawEspecialidades)
+          ? 'ERROR: DriCloud indica que la suscripción WebAPI no está activa'
+          : Array.isArray(rawEspecialidades)
+            ? `OK: Se obtuvieron ${(rawEspecialidades as any[]).length} especialidades reales`
+            : 'DESCONOCIDO: Respuesta inesperada'
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        error: 'Error al conectar con DriCloud',
+        detalle: error.message
+      });
+    }
+  });
+
+  /**
+   * POST /api/dricloud/refresh
+   * Limpia el token cacheado y fuerza reconexión con DriCloud
+   */
+  app.post('/api/dricloud/refresh', async (req, res) => {
+    try {
+      clearTokenCache();
+      // Hacer una petición de prueba para verificar que funciona
+      const especialidades = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      const isDemoMode = isSubscriptionError(especialidades);
+
+      console.log('[DriCloud] Refresh manual - isDemoMode:', isDemoMode);
+
+      res.json({
+        success: true,
+        isDemoMode,
+        message: isDemoMode
+          ? 'Reconectado - Suscripción WebAPI no activa'
+          : 'Reconectado a DriCloud con éxito'
+      });
+    } catch (error) {
+      console.error('[DriCloud] Error en refresh:', error);
+      res.status(500).json({ success: false, error: 'Error al reconectar con DriCloud' });
+    }
+  });
+
   /**
    * GET /api/dricloud/status
    * Verifica si DriCloud está en modo demo o producción
