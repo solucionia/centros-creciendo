@@ -4,8 +4,11 @@ import { storage } from "./storage";
 import { insertDoctorSchema, insertAppointmentSchema } from "@shared/schema";
 import { z } from "zod";
 import { registerDriCloudRoutes } from "./routes/dricloud.routes";
+import { registerAuthRoutes, requireAuth } from "./routes/auth.routes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Registrar rutas de autenticación (login OTP por WhatsApp)
+  registerAuthRoutes(app);
   // Registrar rutas de DriCloud
   registerDriCloudRoutes(app);
   // Doctor routes
@@ -47,7 +50,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Appointment routes
-  app.get('/api/appointments', async (req, res) => {
+  app.get('/api/appointments', requireAuth, async (req, res) => {
     try {
       const { date, doctorId } = req.query;
       let appointments;
@@ -77,7 +80,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/appointments', async (req, res) => {
+  app.post('/api/appointments', requireAuth, async (req, res) => {
     try {
       // Parse and convert appointmentDate from ISO string to Date object
       const requestData = { 
@@ -107,7 +110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/appointments/:id/cancel', async (req, res) => {
+  app.post('/api/appointments/:id/cancel', requireAuth, async (req, res) => {
     try {
       const cancelled = await storage.cancelAppointment(req.params.id);
       if (!cancelled) {

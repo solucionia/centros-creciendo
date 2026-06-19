@@ -113,6 +113,7 @@ export function useCreateDriCloudAppointment() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(appointmentData),
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -148,6 +149,7 @@ export function useCancelDriCloudAppointment() {
     mutationFn: async (citaId: number) => {
       const response = await fetch(`/api/dricloud/appointments/${citaId}/cancel`, {
         method: 'POST',
+        credentials: 'include',
       });
 
       if (!response.ok) {

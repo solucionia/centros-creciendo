@@ -1,4 +1,5 @@
 import type { Express } from 'express';
+import { requireAuth } from './auth.routes';
 import {
   getEspecialidades,
   getDoctores,
@@ -311,7 +312,7 @@ export function registerDriCloudRoutes(app: Express) {
   // ── Pacientes ──────────────────────────────────────────────────────────────
 
   /** GET /api/dricloud/patients?telefono=X */
-  app.get('/api/dricloud/patients', async (req, res) => {
+  app.get('/api/dricloud/patients', requireAuth, async (req, res) => {
     const { telefono } = req.query;
     if (!telefono) return res.status(400).json({ error: 'Se requiere telefono' });
     try {
@@ -326,7 +327,7 @@ export function registerDriCloudRoutes(app: Express) {
   // ── Citas ──────────────────────────────────────────────────────────────────
 
   /** POST /api/dricloud/appointments — crea una cita */
-  app.post('/api/dricloud/appointments', async (req, res) => {
+  app.post('/api/dricloud/appointments', requireAuth, async (req, res) => {
     const {
       doctorId,
       patientName,
@@ -410,7 +411,7 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** PUT /api/dricloud/appointments/:id — modifica una cita */
-  app.put('/api/dricloud/appointments/:id', async (req, res) => {
+  app.put('/api/dricloud/appointments/:id', requireAuth, async (req, res) => {
     const cpaId = parseInt(req.params.id);
     const { appointmentDate, minutos } = req.body;
 
@@ -432,7 +433,7 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** POST /api/dricloud/appointments/:id/cancel — cancela (elimina) una cita */
-  app.post('/api/dricloud/appointments/:id/cancel', async (req, res) => {
+  app.post('/api/dricloud/appointments/:id/cancel', requireAuth, async (req, res) => {
     const cpaId = parseInt(req.params.id);
     if (isNaN(cpaId)) return res.status(400).json({ error: 'ID de cita inválido' });
 
@@ -451,7 +452,7 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** GET /api/dricloud/appointments?nif=X&fechaInicio=yyyyMMdd&fechaFin=yyyyMMdd */
-  app.get('/api/dricloud/appointments', async (req, res) => {
+  app.get('/api/dricloud/appointments', requireAuth, async (req, res) => {
     const { nif, fechaInicio, fechaFin, usuId } = req.query;
     if (!nif) return res.status(400).json({ error: 'Se requiere nif del paciente' });
 
