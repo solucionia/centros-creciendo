@@ -86,6 +86,7 @@ server/
   index.ts          entrypoint: dotenv, Vite/static, listen
   routes.ts         doctors + (local) appointments routes
   routes/           auth.routes.ts, dricloud.routes.ts
+  lib/              shared helpers (normalizePhone)
   services/         crmService, otpService (GoHighLevel OTP)
   dricloud/         DriCloud auth, services, mappers, mock data
 shared/             shared Zod schema / types
@@ -103,5 +104,7 @@ npm test
 ## Security
 
 A security triage of the OTP login is tracked in
-[`docs/SECURITY.md`](./docs/SECURITY.md), including open items and what has
-already been remediated.
+[`docs/SECURITY.md`](./docs/SECURITY.md). All **P0** findings — including both
+IDOR vulnerabilities that exposed third-party patient data — are remediated and
+covered by integration tests. Remaining hardening items (P1 / P2) are listed
+there.
