@@ -5,6 +5,7 @@ import { insertDoctorSchema, insertAppointmentSchema } from "@shared/schema";
 import { z } from "zod";
 import { registerDriCloudRoutes } from "./routes/dricloud.routes";
 import { registerAuthRoutes, requireAuth } from "./routes/auth.routes";
+import { normalizePhone } from "./lib/phone";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Registrar rutas de autenticación (login OTP por WhatsApp)
@@ -53,8 +54,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/appointments', requireAuth, async (req, res) => {
     try {
       const { date, doctorId } = req.query;
+      // Ownership key: only return appointments for the authenticated user's phone.
+      const sessionPhone = normalizePhone(req.session!.user!.phone);
       let appointments;
-      
+
       if (date) {
         const queryDate = new Date(date as string);
         // Check if date is valid
@@ -72,8 +75,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } else {
         appointments = await storage.getAppointments();
       }
-      
-      res.json(appointments);
+
+      // Ownership filter: always applied after the query-level filter.
+      const owned = appointments.filter(
+        (a) => normalizePhone(a.patientPhone) === sessionPhone,
+      );
+      res.json(owned);
     } catch (error) {
       console.error('Error fetching appointments:', error);
       res.status(500).json({ error: 'Internal server error' });
@@ -82,22 +89,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/appointments', requireAuth, async (req, res) => {
     try {
+      // Ownership check: the patientPhone in the body must match the authenticated session.
+      const sessionPhone = normalizePhone(req.session!.user!.phone);
+      if (!sessionPhone || normalizePhone(req.body.patientPhone) !== sessionPhone) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+
       // Parse and convert appointmentDate from ISO string to Date object
-      const requestData = { 
-        ...req.body, 
-        appointmentDate: new Date(req.body.appointmentDate) 
+      const requestData = {
+        ...req.body,
+        appointmentDate: new Date(req.body.appointmentDate)
       };
-      
+
       const validatedData = insertAppointmentSchema.parse(requestData);
-      
+
       // Verify doctor exists
       const doctor = await storage.getDoctor(validatedData.doctorId);
       if (!doctor) {
         return res.status(404).json({ error: 'Doctor not found' });
       }
-      
+
       const appointment = await storage.createAppointment(validatedData);
-      
+
       // Return appointment with doctor info for consistency with GET routes
       const appointmentWithDoctor = { ...appointment, doctor };
       res.status(201).json(appointmentWithDoctor);
@@ -112,10 +125,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/appointments/:id/cancel', requireAuth, async (req, res) => {
     try {
-      const cancelled = await storage.cancelAppointment(req.params.id);
-      if (!cancelled) {
+      const sessionPhone = normalizePhone(req.session!.user!.phone);
+      const appointment = await storage.getAppointment(req.params.id);
+      if (!appointment) {
         return res.status(404).json({ error: 'Appointment not found' });
       }
+      // Ownership check: only the patient who owns the appointment may cancel it.
+      if (normalizePhone(appointment.patientPhone) !== sessionPhone) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      await storage.cancelAppointment(req.params.id);
       res.json({ message: 'Appointment cancelled successfully' });
     } catch (error) {
       console.error('Error cancelling appointment:', error);

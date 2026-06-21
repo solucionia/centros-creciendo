@@ -18,6 +18,7 @@ export interface IStorage {
   getAppointments(): Promise<AppointmentWithDoctor[]>;
   getAppointmentsByDate(date: Date): Promise<AppointmentWithDoctor[]>;
   getAppointmentsByDoctor(doctorId: string): Promise<AppointmentWithDoctor[]>;
+  getAppointment(id: string): Promise<Appointment | undefined>;
   createAppointment(appointment: InsertAppointment): Promise<Appointment>;
   cancelAppointment(id: string): Promise<boolean>;
 }
@@ -188,6 +189,10 @@ export class MemStorage implements IStorage {
   async getAppointmentsByDoctor(doctorId: string): Promise<AppointmentWithDoctor[]> {
     const allAppointments = await this.getAppointments();
     return allAppointments.filter(appointment => appointment.doctorId === doctorId);
+  }
+
+  async getAppointment(id: string): Promise<Appointment | undefined> {
+    return this.appointments.get(id);
   }
 
   async createAppointment(insertAppointment: InsertAppointment): Promise<Appointment> {

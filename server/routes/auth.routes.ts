@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import * as crm from '../services/crmService';
 import * as otpService from '../services/otpService';
+import { normalizePhone } from '../lib/phone';
 
 // ─── Tipado de la sesión ──────────────────────────────────────────────────────
 // Module augmentation: añade el usuario autenticado a la sesión de express-session.
@@ -17,13 +18,6 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
   next();
-}
-
-// ─── Normalización básica del teléfono ────────────────────────────────────────
-// Mantiene el dígito inicial y el prefijo '+', elimina espacios/guiones para
-// que la clave del OTP y la búsqueda en el CRM sean consistentes.
-function normalizePhone(raw: unknown): string {
-  return String(raw ?? '').trim().replace(/[\s\-().]/g, '');
 }
 
 // ─── Rate limiting en memoria ──────────────────────────────────────────────────
