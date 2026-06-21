@@ -17,16 +17,18 @@ identity**, and one phone may map to **several patients** (family case in
 pediatrics). Scoping validates ownership (1:N) against the session phone via the
 shared `normalizePhone` helper in `server/lib/phone.ts`.
 
-## Open — hardening (P1)
+## Remediated — hardening (P1)
 
-| Finding | Location |
+| Finding | Fix |
 | --- | --- |
-| `POST /api/doctors` has no `requireAuth` (anonymous writes to the in-memory store). | `server/routes.ts` |
-| Response logger captures response bodies; `/api/auth/me` returns the phone → PII in logs. | `server/app.ts` |
-| `/api/dricloud/diagnostico` and `/api/dricloud/refresh` are unauthenticated (leak internal URL, allow forced token reconnect). | `server/routes/dricloud.routes.ts` |
-| No security headers (Helmet absent); `X-Powered-By` exposed. | `server/app.ts` |
+| `POST /api/doctors` had no `requireAuth` (anonymous writes to the in-memory store). | `requireAuth` added to the write route. Covered by tests. |
+| Response logger printed response bodies, leaking the user phone and DriCloud patient data (name, phones, email, NIF, passport, DOB) into logs. | Logger now redacts PII via a case-insensitive, pattern-based matcher over a deep copy — never mutating the response sent to the client. Covered by unit and mutation-guard tests. |
+| `/api/dricloud/diagnostico` and `/api/dricloud/refresh` were unauthenticated (leaked internal URL, allowed forced token reconnect). | `requireAuth` added to both. Covered by tests. |
+| No security headers (Helmet absent); `X-Powered-By` exposed. | Helmet baseline headers added and `x-powered-by` disabled. A tailored Content-Security-Policy is deferred (the default would break the Vite-served SPA) and tracked under P2. |
 
 ## Open — improvements (P2)
+
+- Tailored Content-Security-Policy for the SPA (Helmet CSP currently disabled).
 
 - TOCTOU between contact lookup and creation in `request-otp` (possible duplicate CRM contact).
 - `trust proxy` only enabled in production → `req.ip` may be unreliable for rate limiting in other setups.
