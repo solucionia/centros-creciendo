@@ -141,7 +141,7 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** GET /api/dricloud/diagnostico — respuesta RAW de DriCloud para soporte */
-  app.get('/api/dricloud/diagnostico', async (_req, res) => {
+  app.get('/api/dricloud/diagnostico', requireAuth, async (_req, res) => {
     try {
       clearTokenCache();
       const doctores = await getDoctores();
@@ -162,7 +162,7 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** POST /api/dricloud/refresh — fuerza reconexión limpiando el token cacheado */
-  app.post('/api/dricloud/refresh', async (_req, res) => {
+  app.post('/api/dricloud/refresh', requireAuth, async (_req, res) => {
     clearTokenCache();
     try {
       await getEspecialidades(DRICLOUD_CONFIG.clinicaId);

@@ -36,7 +36,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/doctors', async (req, res) => {
+  app.post('/api/doctors', requireAuth, async (req, res) => {
     try {
       const validatedData = insertDoctorSchema.parse(req.body);
       const doctor = await storage.createDoctor(validatedData);
