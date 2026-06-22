@@ -27,6 +27,12 @@ secrets/
 *secret*.json
 *credentials*.json
 
+# ─── SQLite session store (runtime data — never commit) ─────────────────────
+data/
+sessions.db
+sessions.db-shm
+sessions.db-wal
+
 # ─── Replit local state (may contain agent tokens / logs) ────────────────────
 .local/
 .cache/

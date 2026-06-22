@@ -1,8 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import helmet from "helmet";
-// @ts-ignore — memorystore no publica tipos propios
-import createMemoryStore from "memorystore";
+import { createSessionStore } from "./lib/sessionStore";
 import type { Server } from "http";
 import { registerRoutes } from "./routes";
 import { log } from "./vite";
@@ -101,7 +100,7 @@ export async function createApp(): Promise<{ app: express.Express; server: Serve
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
 
-  // ─── Sesión (express-session + memorystore) ───────────────────────────────
+  // ─── Session (express-session + SQLite persistent store) ─────────────────
   const isProduction = process.env.NODE_ENV === "production";
   // TRUST_PROXY controls req.ip reliability and X-Forwarded-For trust.
   // Default is false (safe for no-proxy / local). Set TRUST_PROXY=1 in
@@ -115,7 +114,6 @@ export async function createApp(): Promise<{ app: express.Express; server: Serve
     );
   }
   app.set("trust proxy", resolveTrustProxy(process.env.TRUST_PROXY));
-  const MemoryStoreSession = createMemoryStore(session);
   app.use(
     session({
       name: "connect.sid",
@@ -123,7 +121,7 @@ export async function createApp(): Promise<{ app: express.Express; server: Serve
       resave: false,
       saveUninitialized: false,
       rolling: true,
-      store: new MemoryStoreSession({ checkPeriod: 24 * 60 * 60 * 1000 }),
+      store: createSessionStore(session),
       cookie: {
         httpOnly: true,
         sameSite: "lax",
