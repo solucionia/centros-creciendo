@@ -1,7 +1,7 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import * as crm from '../services/crmService';
 import * as otpService from '../services/otpService';
-import { normalizePhone } from '../lib/phone';
+import { normalizePhone, isValidPhone } from '../lib/phone';
 
 // ─── Tipado de la sesión ──────────────────────────────────────────────────────
 // Module augmentation: añade el usuario autenticado a la sesión de express-session.
@@ -18,6 +18,32 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     return;
   }
   next();
+}
+
+// ─── In-flight lock: serializes find-or-create per normalized phone ───────────
+// Prevents a TOCTOU race where two concurrent requests for the same NEW phone
+// both see null from findContactByPhone and both call createContact, creating
+// duplicate CRM contacts. The map holds the in-flight promise; subsequent
+// callers await the same promise. Entry is removed when the operation settles.
+// Caveat: single-process only — a multi-instance deployment would still race
+// across processes (same caveat as the in-memory session store).
+const findOrCreateInFlight = new Map<string, Promise<string>>();
+
+export function findOrCreateContact(phone: string): Promise<string> {
+  const existing = findOrCreateInFlight.get(phone);
+  if (existing) return existing;
+
+  const op = (async () => {
+    let contactId = await crm.findContactByPhone(phone);
+    if (!contactId) {
+      contactId = await crm.createContact(phone);
+    }
+    return contactId;
+  })();
+
+  findOrCreateInFlight.set(phone, op);
+  op.finally(() => findOrCreateInFlight.delete(phone));
+  return op;
 }
 
 // ─── Rate limiting en memoria ──────────────────────────────────────────────────
@@ -51,10 +77,11 @@ function allowRequest(
 export function registerAuthRoutes(app: Express): void {
   // ─── Solicitar OTP ──────────────────────────────────────────────────────────
   app.post('/api/auth/request-otp', async (req: Request, res: Response) => {
-    const phone = normalizePhone(req.body?.phoneNumber);
-    if (!phone) {
-      return res.status(400).json({ error: 'phoneNumber requerido' });
+    const rawPhone = req.body?.phoneNumber;
+    if (!isValidPhone(rawPhone)) {
+      return res.status(400).json({ error: 'phoneNumber inválido o requerido' });
     }
+    const phone = normalizePhone(rawPhone);
 
     const rateKey = `${phone}:${req.ip}`;
     if (!allowRequest(requestOtpRateStore, rateKey, REQUEST_OTP_MAX)) {
@@ -63,10 +90,9 @@ export function registerAuthRoutes(app: Express): void {
 
     try {
       // Buscar el contacto; si no existe en el CRM, crearlo al vuelo.
-      let contactId = await crm.findContactByPhone(phone);
-      if (!contactId) {
-        contactId = await crm.createContact(phone);
-      }
+      // findOrCreateContact serializes concurrent calls for the same phone to
+      // prevent duplicate CRM contacts under race conditions (TOCTOU fix).
+      const contactId = await findOrCreateContact(phone);
 
       // Generar OTP y dispararlo por WhatsApp vía el campo custom del CRM.
       const otp = otpService.createOtp(phone, contactId);

@@ -6,6 +6,7 @@ import createMemoryStore from "memorystore";
 import type { Server } from "http";
 import { registerRoutes } from "./routes";
 import { log } from "./vite";
+import { resolveTrustProxy, shouldWarnTrustProxy } from "./lib/trustProxy";
 
 const DEV_FALLBACK_SESSION_SECRET = "dev-insecure-secret-change-me";
 
@@ -102,10 +103,18 @@ export async function createApp(): Promise<{ app: express.Express; server: Serve
 
   // ─── Sesión (express-session + memorystore) ───────────────────────────────
   const isProduction = process.env.NODE_ENV === "production";
-  if (isProduction) {
-    // Necesario para que la cookie 'secure' funcione detrás del proxy (Replit).
-    app.set("trust proxy", 1);
+  // TRUST_PROXY controls req.ip reliability and X-Forwarded-For trust.
+  // Default is false (safe for no-proxy / local). Set TRUST_PROXY=1 in
+  // production behind a reverse proxy (e.g. Replit, nginx, Cloudflare).
+  if (shouldWarnTrustProxy(process.env.NODE_ENV, process.env.TRUST_PROXY)) {
+    console.warn(
+      '[app] WARNING: Running in production without TRUST_PROXY set. ' +
+      'req.ip will reflect the proxy IP rather than the real client IP — ' +
+      'IP-based rate limiting may be ineffective behind a reverse proxy. ' +
+      'Set TRUST_PROXY=1 (or the appropriate hop count/CIDR) to fix this.',
+    );
   }
+  app.set("trust proxy", resolveTrustProxy(process.env.TRUST_PROXY));
   const MemoryStoreSession = createMemoryStore(session);
   app.use(
     session({
