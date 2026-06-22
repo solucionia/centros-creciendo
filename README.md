@@ -10,7 +10,8 @@ with a demo-mode fallback when the DriCloud subscription is inactive.
 
 - **Frontend:** React 18 + Vite, Wouter (routing), TanStack Query, Tailwind CSS,
   shadcn/ui (Radix), `input-otp`.
-- **Backend:** Express 4 + TypeScript (ESM), `express-session` + `memorystore`.
+- **Backend:** Express 4 + TypeScript (ESM), `express-session` with a persistent
+  SQLite store (`better-sqlite3`).
 - **Integrations:** GoHighLevel/LeadConnector (OTP delivery over WhatsApp),
   DriCloud WebAPI (patients, doctors, availability, appointments).
 - **Tooling:** `tsx`, `esbuild`, `drizzle-kit`, Vitest + supertest.
