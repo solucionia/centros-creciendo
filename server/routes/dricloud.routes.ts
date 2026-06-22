@@ -1,4 +1,6 @@
 import type { Express } from 'express';
+import { requireAuth } from './auth.routes';
+import { normalizePhone } from '../lib/phone';
 import {
   getEspecialidades,
   getDoctores,
@@ -12,6 +14,7 @@ import {
   deleteCita,
   getCitasByNIF,
   getCitasPacientes,
+  getCitaById,
   getDespachos,
 } from '../dricloud/services';
 import {
@@ -138,7 +141,7 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** GET /api/dricloud/diagnostico — respuesta RAW de DriCloud para soporte */
-  app.get('/api/dricloud/diagnostico', async (_req, res) => {
+  app.get('/api/dricloud/diagnostico', requireAuth, async (_req, res) => {
     try {
       clearTokenCache();
       const doctores = await getDoctores();
@@ -159,7 +162,7 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** POST /api/dricloud/refresh — fuerza reconexión limpiando el token cacheado */
-  app.post('/api/dricloud/refresh', async (_req, res) => {
+  app.post('/api/dricloud/refresh', requireAuth, async (_req, res) => {
     clearTokenCache();
     try {
       await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
@@ -310,12 +313,12 @@ export function registerDriCloudRoutes(app: Express) {
 
   // ── Pacientes ──────────────────────────────────────────────────────────────
 
-  /** GET /api/dricloud/patients?telefono=X */
-  app.get('/api/dricloud/patients', async (req, res) => {
-    const { telefono } = req.query;
-    if (!telefono) return res.status(400).json({ error: 'Se requiere telefono' });
+  /** GET /api/dricloud/patients — phone is always taken from the session, never from query params */
+  app.get('/api/dricloud/patients', requireAuth, async (req, res) => {
+    // Ownership: ignore any client-supplied telefono; use the authenticated session phone.
+    const sessionPhone = normalizePhone(req.session!.user!.phone);
     try {
-      const result = await getPacientesPorTelefono(telefono as string);
+      const result = await getPacientesPorTelefono(sessionPhone);
       res.json(result.Pacientes ?? []);
     } catch (err) {
       console.error('[DriCloud] Error en /patients:', err);
@@ -326,7 +329,7 @@ export function registerDriCloudRoutes(app: Express) {
   // ── Citas ──────────────────────────────────────────────────────────────────
 
   /** POST /api/dricloud/appointments — crea una cita */
-  app.post('/api/dricloud/appointments', async (req, res) => {
+  app.post('/api/dricloud/appointments', requireAuth, async (req, res) => {
     const {
       doctorId,
       patientName,
@@ -344,6 +347,12 @@ export function registerDriCloudRoutes(app: Express) {
       return res.status(400).json({
         error: 'Faltan campos: doctorId, patientName, patientPhone, appointmentDate',
       });
+    }
+
+    // Ownership check: the patientPhone in the body must match the authenticated session.
+    const sessionPhone = normalizePhone(req.session!.user!.phone);
+    if (!sessionPhone || normalizePhone(patientPhone) !== sessionPhone) {
+      return res.status(403).json({ error: 'Forbidden' });
     }
 
     const { nombre, apellidos } = splitFullName(patientName);
@@ -410,11 +419,30 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** PUT /api/dricloud/appointments/:id — modifica una cita */
-  app.put('/api/dricloud/appointments/:id', async (req, res) => {
+  app.put('/api/dricloud/appointments/:id', requireAuth, async (req, res) => {
     const cpaId = parseInt(req.params.id);
     const { appointmentDate, minutos } = req.body;
 
     if (!appointmentDate) return res.status(400).json({ error: 'Se requiere appointmentDate' });
+
+    const sessionPhone = normalizePhone(req.session!.user!.phone);
+
+    // Ownership check: fetch the appointment before mutating.
+    // If the lookup fails, refuse the mutation — do not fall through silently.
+    let cita: Awaited<ReturnType<typeof getCitaById>>;
+    try {
+      cita = await getCitaById(cpaId);
+    } catch (err) {
+      console.error('[DriCloud] Error al verificar propiedad de la cita (PUT):', err);
+      return res.status(503).json({ error: 'No se pudo verificar la identidad de la cita' });
+    }
+
+    if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
+
+    const citaPhone = normalizePhone(cita.PAC_TELEFONO1 ?? '');
+    if (!citaPhone || citaPhone !== sessionPhone) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     const fechaCita = formatDateTimeForDriCloud(new Date(appointmentDate));
     try {
@@ -432,9 +460,28 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** POST /api/dricloud/appointments/:id/cancel — cancela (elimina) una cita */
-  app.post('/api/dricloud/appointments/:id/cancel', async (req, res) => {
+  app.post('/api/dricloud/appointments/:id/cancel', requireAuth, async (req, res) => {
     const cpaId = parseInt(req.params.id);
     if (isNaN(cpaId)) return res.status(400).json({ error: 'ID de cita inválido' });
+
+    const sessionPhone = normalizePhone(req.session!.user!.phone);
+
+    // Ownership check: fetch the appointment before deleting.
+    // If the lookup fails, refuse the deletion — do not fall through silently.
+    let cita: Awaited<ReturnType<typeof getCitaById>>;
+    try {
+      cita = await getCitaById(cpaId);
+    } catch (err) {
+      console.error('[DriCloud] Error al verificar propiedad de la cita (cancel):', err);
+      return res.status(503).json({ error: 'No se pudo verificar la identidad de la cita' });
+    }
+
+    if (!cita) return res.status(404).json({ error: 'Cita no encontrada' });
+
+    const citaPhone = normalizePhone(cita.PAC_TELEFONO1 ?? '');
+    if (!citaPhone || citaPhone !== sessionPhone) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
 
     try {
       await deleteCita(cpaId);
@@ -451,10 +498,34 @@ export function registerDriCloudRoutes(app: Express) {
   });
 
   /** GET /api/dricloud/appointments?nif=X&fechaInicio=yyyyMMdd&fechaFin=yyyyMMdd */
-  app.get('/api/dricloud/appointments', async (req, res) => {
+  app.get('/api/dricloud/appointments', requireAuth, async (req, res) => {
     const { nif, fechaInicio, fechaFin, usuId } = req.query;
     if (!nif) return res.status(400).json({ error: 'Se requiere nif del paciente' });
 
+    const sessionPhone = normalizePhone(req.session!.user!.phone);
+
+    // Phase 1: ownership check — must complete successfully before any data is returned.
+    // If the upstream lookup fails for any reason, the ownership check cannot be
+    // evaluated and we must NOT fall through to a successful (200) response.
+    let pacienteResult: Awaited<ReturnType<typeof getPacienteByNIF>>;
+    try {
+      pacienteResult = await getPacienteByNIF(nif as string);
+    } catch (err) {
+      console.error('[DriCloud] Error al verificar propiedad del paciente:', err);
+      return res.status(503).json({ error: 'No se pudo verificar la identidad del paciente' });
+    }
+
+    if (!pacienteResult.Exists) {
+      return res.status(404).json({ error: 'Paciente no encontrado' });
+    }
+
+    const patientPhone = normalizePhone(pacienteResult.Paciente.PAC_TELEFONO1);
+    // Guard: reject empty patient phone to prevent false '' === '' matches.
+    if (!patientPhone || patientPhone !== sessionPhone) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // Phase 2: ownership confirmed — fetch the actual appointment data.
     try {
       const citas = await getCitasByNIF({
         nif: nif as string,

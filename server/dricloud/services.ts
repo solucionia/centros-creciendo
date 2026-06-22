@@ -209,6 +209,16 @@ export async function createCita(params: {
   return driCloudRequest('PostCitaPaciente', body);
 }
 
+/**
+ * Fetch a single appointment by its CPA_ID.
+ * Used by ownership guards before any mutation.
+ * Returns null when the appointment is not found.
+ */
+export async function getCitaById(cpaId: number): Promise<DriCloudCita | null> {
+  const result = await driCloudRequest<DriCloudCita | null>('GetCitaPorId', { CPA_ID: cpaId });
+  return result ?? null;
+}
+
 export async function updateCita(params: {
   cpaId: number;
   fechaInicioCitaString: string; // yyyyMMddHHmm
