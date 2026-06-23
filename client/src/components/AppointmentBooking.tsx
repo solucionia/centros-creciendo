@@ -4,15 +4,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Calendar, UserCheck, CheckCircle2 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
 import AppointmentCalendar from "./AppointmentCalendar";
 import PatientForm from "./PatientForm";
 import AppointmentConfirmation from "./AppointmentConfirmation";
 import ModifyAppointment from "./ModifyAppointment";
 import CancelAppointment from "./CancelAppointment";
 import { DemoModeBanner } from "./DemoModeBanner";
-import type { Doctor, InsertAppointment } from "@shared/schema";
+import { useCreateDriCloudAppointment } from "@/hooks/use-dricloud";
+import type { Doctor } from "@shared/schema";
 
 interface SelectedSlot {
   doctor: Doctor;
@@ -54,67 +53,28 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
     setCurrentStep('form');
   };
 
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  const createAppointmentMutation = useMutation({
-    mutationFn: async (appointmentData: InsertAppointment) => {
-      const response = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(appointmentData),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al crear la cita');
-      }
-      
-      return response.json();
-    },
-    onSuccess: () => {
-      // Invalidate appointments cache
-      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
-      toast({
-        title: "Cita creada exitosamente",
-        description: "Su cita ha sido reservada correctamente.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error al crear la cita",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const createDriCloudAppointment = useCreateDriCloudAppointment();
 
   const handlePatientFormSubmit = async (data: PatientData) => {
     if (!selectedSlot) return;
-    
+
     setIsLoading(true);
-    
-    // Create appointment date-time
+
+    // Build ISO datetime string from the selected date + time slot (HH:mm).
     const [hours, minutes] = selectedSlot.time.split(':').map(Number);
     const appointmentDateTime = new Date(selectedSlot.date);
     appointmentDateTime.setHours(hours, minutes, 0, 0);
-    
-    const appointmentData: InsertAppointment = {
-      doctorId: selectedSlot.doctor.id,
-      patientName: data.patientName,
-      patientEmail: data.patientEmail,
-      patientPhone: data.patientPhone,
-      patientAge: data.patientAge,
-      appointmentDate: appointmentDateTime,
-      notes: data.notes || null,
-      duration: 30,
-      status: 'scheduled',
-    };
-    
+
     try {
-      await createAppointmentMutation.mutateAsync(appointmentData);
+      await createDriCloudAppointment.mutateAsync({
+        doctorId: selectedSlot.doctor.id,
+        patientName: data.patientName,
+        patientEmail: data.patientEmail,
+        patientPhone: data.patientPhone,
+        patientAge: data.patientAge,
+        appointmentDate: appointmentDateTime.toISOString(),
+        notes: data.notes,
+      });
       setPatientData(data);
       setCurrentStep('confirmation');
     } catch (error) {
