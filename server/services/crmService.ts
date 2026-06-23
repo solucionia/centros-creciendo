@@ -27,8 +27,8 @@ interface CrmContact {
   id: string;
 }
 
-interface ContactSearchResponse {
-  contacts?: CrmContact[];
+interface ContactDuplicateSearchResponse {
+  contact?: CrmContact | null;
 }
 
 interface ContactUpsertResponse {
@@ -36,12 +36,15 @@ interface ContactUpsertResponse {
 }
 
 // ─── Buscar contacto por teléfono ─────────────────────────────────────────────
-// Devuelve el contactId si existe, o null si no hay coincidencias.
+// Uses the duplicate-search endpoint which matches by exact phone number.
+// Returns the contactId if found, or null if no match exists.
+// The old /contacts/search route was incorrect — GHL routes it as GET /contacts/{id}
+// with id="search", returning HTTP 400.
 export async function findContactByPhone(phone: string): Promise<string | null> {
   const url =
-    `${CRM_CONFIG.baseUrl}/contacts/search` +
+    `${CRM_CONFIG.baseUrl}/contacts/search/duplicate` +
     `?locationId=${encodeURIComponent(CRM_CONFIG.locationId)}` +
-    `&query=${encodeURIComponent(phone)}`;
+    `&number=${encodeURIComponent(phone)}`;
 
   const response = await fetch(url, { method: 'GET', headers: crmHeaders() });
 
@@ -51,8 +54,8 @@ export async function findContactByPhone(phone: string): Promise<string | null> 
     throw new Error(`CRM search failed: HTTP ${response.status}`);
   }
 
-  const data: ContactSearchResponse = await response.json();
-  return data.contacts?.[0]?.id ?? null;
+  const data: ContactDuplicateSearchResponse = await response.json();
+  return data.contact?.id ?? null;
 }
 
 // ─── Crear contacto al vuelo ──────────────────────────────────────────────────
