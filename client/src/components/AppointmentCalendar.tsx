@@ -2,18 +2,24 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Calendar, Filter } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Loader2 } from "lucide-react";
 import TimeSlot from "./TimeSlot";
 import type { Doctor } from "@shared/schema";
 import centroLogo from "@assets/centrocreciendo_1758144139702.png";
+import { useDriCloudAvailability } from "@/hooks/use-dricloud";
+import {
+  availabilityToSlotSet,
+  isSlotAvailableFromSet,
+  formatDateForAvailabilityQuery,
+} from "@shared/availability";
 
 interface AppointmentCalendarProps {
   doctors: Doctor[];
@@ -34,16 +40,44 @@ export default function AppointmentCalendar({
   const [filterSpecialty, setFilterSpecialty] = useState<string>("all");
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
 
-  // Generate time slots for a day (9 AM to 5 PM, 30-minute intervals)
-  const timeSlots = useMemo(() => {
-    const slots = [];
-    for (let hour = 9; hour < 17; hour++) {
-      for (let minute = 0; minute < 60; minute += 30) {
-        slots.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`);
-      }
-    }
-    return slots;
-  }, []);
+  // Derive the active doctor id for the availability query.
+  // When the user has selected a specific doctor, use that id.
+  // When "all" is selected, default to the first doctor in the filtered list
+  // so the calendar is never blank when there is only one real doctor.
+  const activeDoctorId = useMemo(() => {
+    if (filterDoctor !== "all") return filterDoctor;
+    const first = doctors.find(
+      (d) => filterSpecialty === "all" || d.specialty === filterSpecialty
+    );
+    return first?.id ?? null;
+  }, [filterDoctor, filterSpecialty, doctors]);
+
+  // Fetch real availability from DriCloud for the selected doctor + week start.
+  // We query starting from the Monday of the current week (diasRecuperar=7)
+  // so the response covers all days visible in the calendar.
+  const weekStart = useMemo(() => {
+    const d = new Date(currentWeek);
+    const day = d.getDay();
+    const offset = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + offset);
+    return d;
+  }, [currentWeek]);
+
+  const {
+    data: availabilityData,
+    isLoading: isAvailabilityLoading,
+  } = useDriCloudAvailability(
+    activeDoctorId ?? "",
+    formatDateForAvailabilityQuery(weekStart),
+    activeDoctorId !== null
+  );
+
+  // Convert the raw availability array into a Set<"HH:MM"> for the selected date.
+  const availableSlotSet = useMemo<Set<string> | null>(() => {
+    if (isAvailabilityLoading) return null;
+    if (!availabilityData) return new Set<string>();
+    return availabilityToSlotSet(availabilityData, selectedDate);
+  }, [availabilityData, selectedDate, isAvailabilityLoading]);
 
   // Get week days starting from Monday
   const weekDays = useMemo(() => {
@@ -74,22 +108,18 @@ export default function AppointmentCalendar({
     return filtered;
   }, [doctors, filterSpecialty, filterDoctor]);
 
-  // Mock availability data - in real app this would come from the backend
-  const isSlotAvailable = (doctor: Doctor, time: string, date: Date): boolean => {
-    // Skip weekends
-    if (date.getDay() === 0 || date.getDay() === 6) return false;
-    // Skip past times for today
-    if (date.toDateString() === new Date().toDateString()) {
-      const now = new Date();
-      const [hours, minutes] = time.split(':').map(Number);
-      const slotTime = new Date();
-      slotTime.setHours(hours, minutes, 0, 0);
-      if (slotTime <= now) return false;
-    }
-    // Mock some unavailable slots
-    const unavailableSlots = ['11:00', '14:00', '15:30'];
-    return !unavailableSlots.includes(time);
+  // Derive the set of available time strings from the DriCloud response.
+  // isSlotAvailableFromSet handles weekend + null (loading) guards.
+  const checkSlotAvailable = (_doctor: Doctor, time: string, date: Date): boolean => {
+    return isSlotAvailableFromSet(availableSlotSet, time, date);
   };
+
+  // Build the visible time grid from the real availability data for the selected date.
+  // When loading or empty, fall back to an empty array so no phantom slots render.
+  const timeSlots = useMemo<string[]>(() => {
+    if (!availableSlotSet || availableSlotSet.size === 0) return [];
+    return Array.from(availableSlotSet).sort();
+  }, [availableSlotSet]);
 
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newWeek = new Date(currentWeek);
@@ -233,25 +263,38 @@ export default function AppointmentCalendar({
             <span className="text-sm font-medium">
               Citas disponibles para {formatDate(selectedDate)}
             </span>
-            <Badge variant="outline" className="text-xs">
-              {filteredDoctors.length} doctor{filteredDoctors.length !== 1 ? 'es' : ''}
-            </Badge>
+            {isAvailabilityLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            ) : (
+              <Badge variant="outline" className="text-xs">
+                {timeSlots.length} hueco{timeSlots.length !== 1 ? 's' : ''}
+              </Badge>
+            )}
           </div>
 
           <div className="grid gap-2 max-h-96 overflow-y-auto">
-            {timeSlots.map((time) => {
-              // Find available doctors for this time slot
-              const availableDoctors = filteredDoctors.filter(doctor => 
-                isSlotAvailable(doctor, time, selectedDate)
+            {isAvailabilityLoading && (
+              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                Cargando disponibilidad...
+              </div>
+            )}
+
+            {!isAvailabilityLoading && timeSlots.length === 0 && (
+              <div className="text-sm text-muted-foreground italic py-4 text-center">
+                No hay huecos disponibles para este día.
+              </div>
+            )}
+
+            {!isAvailabilityLoading && timeSlots.map((time) => {
+              // All times in the set are confirmed available from DriCloud;
+              // use checkSlotAvailable to guard weekends (already handled by the
+              // set derivation, but kept as a safety net).
+              const availableDoctors = filteredDoctors.filter((doctor) =>
+                checkSlotAvailable(doctor, time, selectedDate)
               );
 
-              if (availableDoctors.length === 0) {
-                return (
-                  <div key={time} className="text-xs text-muted-foreground italic p-2">
-                    {time} - No hay disponibilidad
-                  </div>
-                );
-              }
+              if (availableDoctors.length === 0) return null;
 
               return (
                 <div key={time} className="space-y-1">
@@ -263,7 +306,7 @@ export default function AppointmentCalendar({
                       doctor={doctor}
                       isAvailable={true}
                       isSelected={
-                        selectedSlot?.doctorId === doctor.id && 
+                        selectedSlot?.doctorId === doctor.id &&
                         selectedSlot?.time === time &&
                         selectedSlot?.date.toDateString() === selectedDate.toDateString()
                       }
