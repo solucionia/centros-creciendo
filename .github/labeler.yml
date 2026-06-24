@@ -1,0 +1,10 @@
+# Configuration for actions/labeler@v4 — applies labels to PRs based on the
+# paths they change. Only maps to labels that already exist in this repo so the
+# workflow never fails trying to apply a missing label.
+
+documentation:
+  - '**/*.md'
+
+tests:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
