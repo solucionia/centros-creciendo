@@ -1,107 +1,54 @@
-# 🏥 CitaFacil - Estado de Integración DriCloud
+# 🏥 CitaFacil — DriCloud Integration Status
 
-## 📊 Diagnóstico Completo
+**Last verified:** 2026-06-23 (live against the real API)
 
-### ✅ **FUNCIONANDO CORRECTAMENTE:**
+## ✅ Working
 
-1. **Autenticación DriCloud:**
-   - ✅ Login exitoso con credenciales MD5
-   - ✅ Token cacheado correctamente (23 horas)
-   - ✅ Conexión establecida con DriCloud
+1. **Authentication** — `LoginExternalHash` succeeds; the MD5 hash matches the
+   official Postman recipe (`md5(userName + md5(password) + timeSpanString + salt)`,
+   uppercase, timestamp in `Europe/Madrid`). Token cached ~23h.
+2. **WebAPI subscription — ACTIVE.** Data endpoints respond with real data
+   (no "Suscripción a WebAPI no activa" error):
+   - `GetEspecialidades` → `Data.Especialidades[]` (with `ListadoTIPO_CITA`: duration + price)
+   - `GetDoctores` → `Data.Doctores[]`
+   - `GetAgendaDisponibilidad` → `Data.Disponibilidad[]`
+3. **Calendar wired to real availability** — `AppointmentCalendar` reads slots
+   from `GET /api/dricloud/availability` (no more hardcoded slots). See PR #11.
 
-2. **Configuración:**
-   - ✅ DRICLOUD_URL_CLINICA configurado
-   - ✅ DRICLOUD_CLINICA_ID configurado
-   - ✅ DRICLOUD_API_PASSWORD configurado
+## ⚙️ Configuration
 
-3. **Código de Integración:**
-   - ✅ Todos los endpoints implementados
-   - ✅ Mapeo de datos correcto
-   - ✅ Gestión de errores implementada
+| Variable | Value / shape |
+| --- | --- |
+| `DRICLOUD_URL_CLINICA` | clinic path segment only, e.g. `Dricloud_centrocreciendo_20423221` |
+| `DRICLOUD_CLINICA_ID` | `idClinica` for the login body, e.g. `20423` |
+| `DRICLOUD_API_PASSWORD` | WebAPI user password (keep in `.env`, never commit) |
 
----
+The base URL (`https://apidricloud.dricloud.net`), `userName` (`WebAPI`) and the
+salt are set in `server/dricloud/auth.ts`; only the three variables above come
+from the environment.
 
-## ❌ **PROBLEMA IDENTIFICADO:**
+## ⚠️ Important: this is a TEST environment
 
-### **Suscripción a WebAPI NO Activa**
+The seeded doctor (USU_ID 98, "Jose Maria Arias Aguilera") is flagged
+*"Entorno de pruebas (no acepta citas con pacientes)"* and has **no published
+agenda**, so `GetAgendaDisponibilidad` currently returns **0 slots**. The
+connection and parsing are correct — the calendar shows a real empty state
+rather than fabricated slots. Real availability/booking needs a production
+clinic with a published agenda.
 
-**Error DriCloud:** `"Error. Suscripción a WebAPI no activa."`
+## 📋 Open follow-ups
 
-**Endpoints Afectados:**
-- `GetEspecialidades` → ❌ Suscripción requerida
-- `GetDoctores` → ❌ Suscripción requerida  
-- `GetAgendaDisponibilidad` → ❌ Suscripción requerida
-- `GetPacientes` → ❌ Suscripción requerida
-- Todos los endpoints de datos → ❌ Suscripción requerida
-
-**Único endpoint funcionando:**
-- `Login` → ✅ Funciona (devuelve token)
-
----
-
-## 🔧 **SOLUCIÓN REQUERIDA:**
-
-### **Paso 1: Activar Suscripción DriCloud WebAPI**
-
-**Debe contactar a DriCloud para:**
-1. Activar la suscripción a WebAPI para su clínica
-2. Verificar que la clínica ID `dricloud_creciendomirasierra_20627620` tenga permisos
-3. Confirmar que todos los endpoints estén habilitados
-
-**Información para proporcionar a DriCloud:**
-- Clínica ID: `dricloud_creciendomirasierra_20627620`
-- Endpoints necesarios: GetEspecialidades, GetDoctores, GetAgendaDisponibilidad, GetPacientes, etc.
-- Respuesta actual: "Suscripción a WebAPI no activa"
+- Booking (`AppointmentBooking.tsx`) now targets DriCloud via
+  `useCreateDriCloudAppointment` — see PR #12 (pending review; not verifiable
+  end-to-end in the test environment).
+- Verify `GetAgendaDisponibilidad` with `DES_ID` / `TCI_ID` once a real agenda
+  exists, in case slots require those params.
 
 ---
 
-## 🚀 **MIENTRAS SE ACTIVA LA SUSCRIPCIÓN:**
+### Historical note
 
-CitaFacil funcionará con **datos de demostración** que permiten:
-- ✅ Probar la interfaz completa
-- ✅ Ver el flujo de reserva, modificación y cancelación
-- ✅ Entrenar al personal en el uso del sistema
-
-**Una vez activada la suscripción DriCloud:**
-- El sistema se conectará automáticamente a datos reales
-- No requiere cambios de código
-- Todo funcionará de forma transparente
-
----
-
-## 📋 **CHECKLIST PARA ACTIVACIÓN:**
-
-- [ ] Contactar soporte DriCloud
-- [ ] Solicitar activación de suscripción WebAPI
-- [ ] Proporcionar Clínica ID: `dricloud_creciendomirasierra_20627620`
-- [ ] Esperar confirmación de activación
-- [ ] Probar endpoint: `http://localhost:5000/api/dricloud/doctors`
-- [ ] Verificar que devuelva doctores reales (no array vacío)
-
----
-
-## 🔍 **VERIFICACIÓN POST-ACTIVACIÓN:**
-
-```bash
-# Probar doctores
-curl http://localhost:5000/api/dricloud/doctors
-
-# Probar especialidades
-curl http://localhost:5000/api/dricloud/specialties
-```
-
-**Respuesta esperada:** Array con datos reales (no mensaje de error)
-
----
-
-## 📞 **CONTACTO DRICLOUD:**
-
-Para activar la suscripción, contacte con:
-- Soporte técnico DriCloud
-- Solicite: "Activación de suscripción WebAPI"
-- Proporcione su Clínica ID
-
----
-
-**Fecha diagnóstico:** 13 de octubre, 2025  
-**Estado:** Integración lista, esperando activación de suscripción DriCloud
+A previous diagnosis (2025-10-13) against a different clinic
+(`Dricloud_creciendomirasierra_20627620`) reported the WebAPI subscription as
+**inactive** — only `Login` worked then. That is no longer the case for the
+current clinic (`centrocreciendo`, `idClinica 20423`).

@@ -45,7 +45,9 @@ commit `.env`** — it is gitignored.
 | `CRM_BASE_URL` | LeadConnector API base URL |
 | `OTP_EXPIRY_SECONDS` / `OTP_MAX_ATTEMPTS` | OTP lifetime and attempt limit |
 | `SESSION_SECRET` | Session cookie signing secret (**required in production**) |
-| `DRICLOUD_URL_CLINICA` / `DRICLOUD_CLINICA_ID` / `DRICLOUD_API_PASSWORD` | DriCloud WebAPI credentials |
+| `TRUST_PROXY` | Express "trust proxy" setting — set when behind a reverse proxy |
+| `SESSION_DB_PATH` | SQLite file for persistent sessions (default `./data/sessions.db`) |
+| `DRICLOUD_URL_CLINICA` / `DRICLOUD_CLINICA_ID` / `DRICLOUD_API_PASSWORD` | DriCloud WebAPI credentials (`DRICLOUD_URL_CLINICA` is the clinic path segment only, e.g. `Dricloud_centrocreciendo_20423221`) |
 
 `SESSION_SECRET` is mandatory in production — the server throws on startup if it
 is missing. In development a local fallback is used so you can run without it.
@@ -107,5 +109,7 @@ npm test
 A security triage of the OTP login is tracked in
 [`docs/SECURITY.md`](./docs/SECURITY.md). All **P0** findings — including both
 IDOR vulnerabilities that exposed third-party patient data — are remediated and
-covered by integration tests. Remaining hardening items (P1 / P2) are listed
-there.
+covered by integration tests. The P1 and P2 hardening items (auth guards,
+Helmet, PII-safe logging, phone canonicalization, TOCTOU lock, and a persistent
+SQLite session store) are also remediated — details in
+[`docs/SECURITY.md`](./docs/SECURITY.md).
