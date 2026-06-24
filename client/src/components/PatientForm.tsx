@@ -41,22 +41,26 @@ interface PatientFormProps {
   onSubmit?: (data: PatientFormData) => void;
   onCancel?: () => void;
   isLoading?: boolean;
+  /** Phone number from the active session. When provided the phone field is
+   *  pre-filled and locked so it always matches the authenticated account. */
+  sessionPhone?: string;
 }
 
-export default function PatientForm({ 
-  doctor, 
-  appointmentTime, 
+export default function PatientForm({
+  doctor,
+  appointmentTime,
   appointmentDate,
   onSubmit,
   onCancel,
-  isLoading = false
+  isLoading = false,
+  sessionPhone,
 }: PatientFormProps) {
   const form = useForm<PatientFormData>({
     resolver: zodResolver(patientFormSchema),
     defaultValues: {
       patientName: "",
       patientEmail: "",
-      patientPhone: "",
+      patientPhone: sessionPhone ?? "",
       patientAge: undefined,
       notes: "",
     },
@@ -98,7 +102,6 @@ export default function PatientForm({
   };
 
   const handleSubmit = (data: PatientFormData) => {
-    console.log('Form submitted:', data);
     onSubmit?.(data);
   };
 
@@ -204,10 +207,12 @@ export default function PatientForm({
                   <FormItem>
                     <FormLabel>Teléfono *</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="tel" 
-                        placeholder="+57 300 123 4567" 
+                      <Input
+                        type="tel"
+                        placeholder="+57 300 123 4567"
                         {...field}
+                        readOnly={!!sessionPhone}
+                        className={sessionPhone ? "bg-muted cursor-not-allowed" : ""}
                         data-testid="input-patient-phone"
                       />
                     </FormControl>

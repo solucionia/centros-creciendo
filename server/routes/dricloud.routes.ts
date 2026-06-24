@@ -21,6 +21,7 @@ import {
   mapDriCloudDoctor,
   formatDateForDriCloud,
   formatDateTimeForDriCloud,
+  naiveLocalStringToDateTimeForDriCloud,
   parseDisponibilidad,
   splitFullName,
 } from '../dricloud/mapper';
@@ -352,11 +353,13 @@ export function registerDriCloudRoutes(app: Express) {
     // Ownership check: the patientPhone in the body must match the authenticated session.
     const sessionPhone = normalizePhone(req.session!.user!.phone);
     if (!sessionPhone || normalizePhone(patientPhone) !== sessionPhone) {
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(403).json({
+        error: 'El teléfono no coincide con el de tu cuenta. Usa el mismo teléfono con el que iniciaste sesión.',
+      });
     }
 
     const { nombre, apellidos } = splitFullName(patientName);
-    const fechaCita = formatDateTimeForDriCloud(new Date(appointmentDate));
+    const fechaCita = naiveLocalStringToDateTimeForDriCloud(appointmentDate);
 
     try {
       // 1. Buscar o crear paciente
@@ -441,10 +444,12 @@ export function registerDriCloudRoutes(app: Express) {
 
     const citaPhone = normalizePhone(cita.PAC_TELEFONO1 ?? '');
     if (!citaPhone || citaPhone !== sessionPhone) {
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(403).json({
+        error: 'El teléfono no coincide con el de tu cuenta. Usa el mismo teléfono con el que iniciaste sesión.',
+      });
     }
 
-    const fechaCita = formatDateTimeForDriCloud(new Date(appointmentDate));
+    const fechaCita = naiveLocalStringToDateTimeForDriCloud(appointmentDate);
     try {
       const result = await updateCita({ cpaId, fechaInicioCitaString: fechaCita, minutos });
       console.log('[DriCloud] ✅ Cita modificada:', result.CPA_ID);

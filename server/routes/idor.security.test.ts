@@ -452,7 +452,7 @@ describe('BLOCKER 2 — DriCloud modify/cancel appointment ownership guard', () 
     const agentA = await authenticatedAgent(app, phoneA);
 
     const res = await agentA.put('/api/dricloud/appointments/555').send({
-      appointmentDate: '2027-01-20T10:00:00Z',
+      appointmentDate: '2027-01-20T10:00',
     });
 
     expect(res.status).not.toBe(403);
@@ -623,10 +623,35 @@ describe('SHOULD-FIX 3 — POST /api/dricloud/appointments rejects patientPhone 
       patientEmail: 'legit@example.com',
       patientPhone: phoneA, // correct phone
       patientAge: 30,
-      appointmentDate: new Date('2027-04-02T10:00:00Z').toISOString(),
+      appointmentDate: '2027-04-02T10:00',
     });
 
     // Ownership guard passed. Accept 201 (success) or 502 (DriCloud error on further calls).
     expect(res.status).not.toBe(403);
+  });
+
+  // ── W2: 403 body must be a user-readable Spanish message ─────────────────────
+
+  it('403 body contains a user-readable Spanish error message (not generic "Forbidden")', async () => {
+    const { app } = await createApp();
+
+    const phoneA = '+34655003001';
+    const phoneB = '+34655003002';
+
+    const agentA = await authenticatedAgent(app, phoneA);
+
+    const res = await agentA.post('/api/dricloud/appointments').send({
+      doctorId: '1',
+      patientName: 'Attacker',
+      patientEmail: 'attacker@example.com',
+      patientPhone: phoneB,
+      patientAge: 30,
+      appointmentDate: '2027-04-10T10:00',
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).not.toBe('Forbidden');
+    // Must mention "teléfono" or "telefono" (i18n user-readable message)
+    expect(res.body.error.toLowerCase()).toMatch(/tel[eé]fono/);
   });
 });

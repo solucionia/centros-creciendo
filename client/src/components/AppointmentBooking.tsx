@@ -11,6 +11,7 @@ import ModifyAppointment from "./ModifyAppointment";
 import CancelAppointment from "./CancelAppointment";
 import { DemoModeBanner } from "./DemoModeBanner";
 import { useCreateDriCloudAppointment } from "@/hooks/use-dricloud";
+import { useAuthStatus } from "@/hooks/use-auth";
 import type { Doctor } from "@shared/schema";
 
 interface SelectedSlot {
@@ -54,16 +55,24 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
   };
 
   const createDriCloudAppointment = useCreateDriCloudAppointment();
+  const { data: authStatus } = useAuthStatus();
+  const sessionPhone = authStatus?.authenticated ? authStatus.phone : undefined;
 
   const handlePatientFormSubmit = async (data: PatientData) => {
     if (!selectedSlot) return;
 
     setIsLoading(true);
 
-    // Build ISO datetime string from the selected date + time slot (HH:mm).
-    const [hours, minutes] = selectedSlot.time.split(':').map(Number);
-    const appointmentDateTime = new Date(selectedSlot.date);
-    appointmentDateTime.setHours(hours, minutes, 0, 0);
+    // Build a timezone-naive local datetime string "yyyy-MM-ddTHH:mm" from the
+    // selected calendar date and time slot. Never call toISOString() here —
+    // that would convert to UTC and corrupt the wall-clock slot when the
+    // server timezone differs from the browser timezone.
+    const slotDate = selectedSlot.date;
+    const year = slotDate.getFullYear();
+    const month = String(slotDate.getMonth() + 1).padStart(2, '0');
+    const day = String(slotDate.getDate()).padStart(2, '0');
+    const [slotHH, slotMM] = selectedSlot.time.split(':');
+    const naiveLocalDateTime = `${year}-${month}-${day}T${slotHH}:${slotMM}`;
 
     try {
       await createDriCloudAppointment.mutateAsync({
@@ -72,7 +81,7 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
         patientEmail: data.patientEmail,
         patientPhone: data.patientPhone,
         patientAge: data.patientAge,
-        appointmentDate: appointmentDateTime.toISOString(),
+        appointmentDate: naiveLocalDateTime,
         notes: data.notes,
       });
       setPatientData(data);
@@ -130,6 +139,7 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
             onSubmit={handlePatientFormSubmit}
             onCancel={handleBackToCalendar}
             isLoading={isLoading}
+            sessionPhone={sessionPhone}
           />
         );
 

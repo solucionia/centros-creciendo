@@ -64,6 +64,30 @@ export function formatDateTimeForDriCloud(date: Date): string {
 }
 
 /**
+ * Converts a timezone-naive local datetime string "yyyy-MM-ddTHH:mm" to the
+ * DriCloud format "yyyyMMddHHmm" via pure string manipulation — no Date object
+ * is involved, so server-local timezone cannot corrupt the wall-clock slot.
+ *
+ * The client must send the slot as a naive local string (no trailing "Z", ":ss",
+ * or UTC offset). Example: "2025-07-15T10:00" → "202507151000".
+ *
+ * Throws if the input does not strictly match "yyyy-MM-ddTHH:mm" so callers
+ * fail loudly instead of silently sending garbage to DriCloud.
+ */
+export function naiveLocalStringToDateTimeForDriCloud(naiveLocalString: string): string {
+  // Strict format: exactly "yyyy-MM-ddTHH:mm" — 16 chars, no timezone designator,
+  // no seconds, no trailing Z or offset.
+  const NAIVE_LOCAL_REGEX = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+  if (!NAIVE_LOCAL_REGEX.test(naiveLocalString)) {
+    throw new Error(
+      `Invalid naive datetime for DriCloud: "${naiveLocalString}". Expected "yyyy-MM-ddTHH:mm" with no timezone designator, seconds, or UTC offset.`,
+    );
+  }
+  // Strip separators: remove "-", "T", ":"
+  return naiveLocalString.replace(/[-T:]/g, '');
+}
+
+/**
  * Parsea la disponibilidad de DriCloud
  * Formato: "yyyyMMddHHmm:<MinCita>:<DES_ID>"
  */
