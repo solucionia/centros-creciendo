@@ -359,7 +359,12 @@ export function registerDriCloudRoutes(app: Express) {
     }
 
     const { nombre, apellidos } = splitFullName(patientName);
-    const fechaCita = naiveLocalStringToDateTimeForDriCloud(appointmentDate);
+    let fechaCita: string;
+    try {
+      fechaCita = naiveLocalStringToDateTimeForDriCloud(appointmentDate);
+    } catch {
+      return res.status(400).json({ error: 'Formato de fecha de cita inválido.' });
+    }
 
     try {
       // 1. Buscar o crear paciente
@@ -449,7 +454,12 @@ export function registerDriCloudRoutes(app: Express) {
       });
     }
 
-    const fechaCita = naiveLocalStringToDateTimeForDriCloud(appointmentDate);
+    let fechaCita: string;
+    try {
+      fechaCita = naiveLocalStringToDateTimeForDriCloud(appointmentDate);
+    } catch {
+      return res.status(400).json({ error: 'Formato de fecha de cita inválido.' });
+    }
     try {
       const result = await updateCita({ cpaId, fechaInicioCitaString: fechaCita, minutos });
       console.log('[DriCloud] ✅ Cita modificada:', result.CPA_ID);
