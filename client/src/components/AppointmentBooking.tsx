@@ -4,15 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ArrowLeft, Calendar, UserCheck, CheckCircle2 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
 import AppointmentCalendar from "./AppointmentCalendar";
 import PatientForm from "./PatientForm";
 import AppointmentConfirmation from "./AppointmentConfirmation";
 import ModifyAppointment from "./ModifyAppointment";
 import CancelAppointment from "./CancelAppointment";
 import { DemoModeBanner } from "./DemoModeBanner";
-import type { Doctor, InsertAppointment } from "@shared/schema";
+import { useCreateDriCloudAppointment } from "@/hooks/use-dricloud";
+import { useAuthStatus } from "@/hooks/use-auth";
+import type { Doctor } from "@shared/schema";
 
 interface SelectedSlot {
   doctor: Doctor;
@@ -54,67 +54,36 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
     setCurrentStep('form');
   };
 
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  const createAppointmentMutation = useMutation({
-    mutationFn: async (appointmentData: InsertAppointment) => {
-      const response = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(appointmentData),
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Error al crear la cita');
-      }
-      
-      return response.json();
-    },
-    onSuccess: () => {
-      // Invalidate appointments cache
-      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
-      toast({
-        title: "Cita creada exitosamente",
-        description: "Su cita ha sido reservada correctamente.",
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error al crear la cita",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const createDriCloudAppointment = useCreateDriCloudAppointment();
+  const { data: authStatus } = useAuthStatus();
+  const sessionPhone = authStatus?.authenticated ? authStatus.phone : undefined;
 
   const handlePatientFormSubmit = async (data: PatientData) => {
     if (!selectedSlot) return;
-    
+
     setIsLoading(true);
-    
-    // Create appointment date-time
-    const [hours, minutes] = selectedSlot.time.split(':').map(Number);
-    const appointmentDateTime = new Date(selectedSlot.date);
-    appointmentDateTime.setHours(hours, minutes, 0, 0);
-    
-    const appointmentData: InsertAppointment = {
-      doctorId: selectedSlot.doctor.id,
-      patientName: data.patientName,
-      patientEmail: data.patientEmail,
-      patientPhone: data.patientPhone,
-      patientAge: data.patientAge,
-      appointmentDate: appointmentDateTime,
-      notes: data.notes || null,
-      duration: 30,
-      status: 'scheduled',
-    };
-    
+
+    // Build a timezone-naive local datetime string "yyyy-MM-ddTHH:mm" from the
+    // selected calendar date and time slot. Never call toISOString() here —
+    // that would convert to UTC and corrupt the wall-clock slot when the
+    // server timezone differs from the browser timezone.
+    const slotDate = selectedSlot.date;
+    const year = slotDate.getFullYear();
+    const month = String(slotDate.getMonth() + 1).padStart(2, '0');
+    const day = String(slotDate.getDate()).padStart(2, '0');
+    const [slotHH, slotMM] = selectedSlot.time.split(':');
+    const naiveLocalDateTime = `${year}-${month}-${day}T${slotHH}:${slotMM}`;
+
     try {
-      await createAppointmentMutation.mutateAsync(appointmentData);
+      await createDriCloudAppointment.mutateAsync({
+        doctorId: selectedSlot.doctor.id,
+        patientName: data.patientName,
+        patientEmail: data.patientEmail,
+        patientPhone: data.patientPhone,
+        patientAge: data.patientAge,
+        appointmentDate: naiveLocalDateTime,
+        notes: data.notes,
+      });
       setPatientData(data);
       setCurrentStep('confirmation');
     } catch (error) {
@@ -170,6 +139,7 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
             onSubmit={handlePatientFormSubmit}
             onCancel={handleBackToCalendar}
             isLoading={isLoading}
+            sessionPhone={sessionPhone}
           />
         );
 

@@ -38,11 +38,21 @@ clinic with a published agenda.
 
 ## 📋 Open follow-ups
 
-- Booking (`AppointmentBooking.tsx`) now targets DriCloud via
-  `useCreateDriCloudAppointment` — see PR #12 (pending review; not verifiable
-  end-to-end in the test environment).
-- Verify `GetAgendaDisponibilidad` with `DES_ID` / `TCI_ID` once a real agenda
-  exists, in case slots require those params.
+- Booking (`AppointmentBooking.tsx`) targets DriCloud via
+  `useCreateDriCloudAppointment` — see PR #12. Two review findings were fixed
+  on that branch (commit `fe15003`):
+  - **Timezone:** the booked wall-clock time is now sent as a timezone-naive
+    `yyyy-MM-ddTHH:mm` string and converted server-side without `Date`/UTC, so
+    the slot is no longer shifted when the server timezone differs from the
+    browser. `naiveLocalStringToDateTimeForDriCloud` throws on malformed input
+    instead of forwarding garbage to DriCloud.
+  - **Phone UX:** the patient phone field is pre-filled and locked from the
+    authenticated session; the ownership-mismatch response now returns a
+    readable Spanish message instead of `Forbidden`.
+- **End-to-end verification is still pending** a production clinic with a
+  published agenda (this is a TEST clinic) — tracked in #14. That includes
+  verifying `GetAgendaDisponibilidad` with `DES_ID` / `TCI_ID` in case slots
+  require those params.
 
 ---
 

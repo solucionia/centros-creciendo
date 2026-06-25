@@ -382,7 +382,7 @@ describe('BLOCKER 2 — DriCloud modify/cancel appointment ownership guard', () 
     const agentA = await authenticatedAgent(app, phoneA);
 
     const res = await agentA.put('/api/dricloud/appointments/999').send({
-      appointmentDate: '2027-01-15T10:00:00Z',
+      appointmentDate: '2027-01-15T10:00',
     });
 
     expect(res.status).toBe(403);
@@ -400,7 +400,7 @@ describe('BLOCKER 2 — DriCloud modify/cancel appointment ownership guard', () 
     const agentA = await authenticatedAgent(app, phoneA);
 
     const res = await agentA.put('/api/dricloud/appointments/888').send({
-      appointmentDate: '2027-01-15T10:00:00Z',
+      appointmentDate: '2027-01-15T10:00',
     });
 
     expect(res.status).not.toBe(200);
@@ -452,7 +452,7 @@ describe('BLOCKER 2 — DriCloud modify/cancel appointment ownership guard', () 
     const agentA = await authenticatedAgent(app, phoneA);
 
     const res = await agentA.put('/api/dricloud/appointments/555').send({
-      appointmentDate: '2027-01-20T10:00:00Z',
+      appointmentDate: '2027-01-20T10:00',
     });
 
     expect(res.status).not.toBe(403);
@@ -623,10 +623,94 @@ describe('SHOULD-FIX 3 — POST /api/dricloud/appointments rejects patientPhone 
       patientEmail: 'legit@example.com',
       patientPhone: phoneA, // correct phone
       patientAge: 30,
-      appointmentDate: new Date('2027-04-02T10:00:00Z').toISOString(),
+      appointmentDate: '2027-04-02T10:00',
     });
 
     // Ownership guard passed. Accept 201 (success) or 502 (DriCloud error on further calls).
     expect(res.status).not.toBe(403);
+  });
+
+  // ── W2: 403 body must be a user-readable Spanish message ─────────────────────
+
+  it('403 body contains a user-readable Spanish error message (not generic "Forbidden")', async () => {
+    const { app } = await createApp();
+
+    const phoneA = '+34655003001';
+    const phoneB = '+34655003002';
+
+    const agentA = await authenticatedAgent(app, phoneA);
+
+    const res = await agentA.post('/api/dricloud/appointments').send({
+      doctorId: '1',
+      patientName: 'Attacker',
+      patientEmail: 'attacker@example.com',
+      patientPhone: phoneB,
+      patientAge: 30,
+      appointmentDate: '2027-04-10T10:00',
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).not.toBe('Forbidden');
+    // Must mention "teléfono" or "telefono" (i18n user-readable message)
+    expect(res.body.error.toLowerCase()).toMatch(/tel[eé]fono/);
+  });
+});
+
+// ── C1: malformed appointmentDate must return 400, not hang ───────────────────
+//
+// Proves that a synchronous throw from naiveLocalStringToDateTimeForDriCloud
+// is caught inside the handler and returned as HTTP 400 — NOT an unhandled
+// rejection / hanging request.  Ownership passes (patientPhone === session phone
+// for POST, cita phone === session phone for PUT) so the only failure is the
+// malformed date.
+
+describe('C1 — malformed appointmentDate returns 400 (not 500 or hang)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('POST /api/dricloud/appointments: returns 400 when appointmentDate is ISO with Z (not naive)', async () => {
+    const phoneA = '+34699001001';
+
+    // Ownership must pass — mock patient lookup and cita creation so the route
+    // reaches the date conversion step and not a 403.
+    (dricloudServices.getPacientePorNombreTelefono as ReturnType<typeof vi.fn>).mockResolvedValue({
+      Exists: true,
+      Paciente: { PAC_ID: 1 },
+    });
+    (dricloudServices.createCita as ReturnType<typeof vi.fn>).mockResolvedValue({ CPA_ID: 1 });
+
+    const { app } = await createApp();
+    const agentA = await authenticatedAgent(app, phoneA);
+
+    const res = await agentA.post('/api/dricloud/appointments').send({
+      doctorId: '1',
+      patientName: 'Test Patient',
+      patientEmail: 'test@example.com',
+      patientPhone: phoneA,
+      patientAge: 30,
+      appointmentDate: '2027-01-15T10:00:00Z', // ISO with Z — malformed for DriCloud
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /api/dricloud/appointments/:id: returns 400 when appointmentDate is ISO with Z (not naive)', async () => {
+    const phoneA = '+34699002001';
+
+    // Ownership must pass — cita phone matches session phone
+    (dricloudServices.getCitaById as ReturnType<typeof vi.fn>).mockResolvedValue({
+      CPA_ID: 111, USU_ID: 1, PAC_TELEFONO1: phoneA,
+    });
+    (dricloudServices.updateCita as ReturnType<typeof vi.fn>).mockResolvedValue({ CPA_ID: 111 });
+
+    const { app } = await createApp();
+    const agentA = await authenticatedAgent(app, phoneA);
+
+    const res = await agentA.put('/api/dricloud/appointments/111').send({
+      appointmentDate: '2027-01-15T10:00:00Z', // ISO with Z — malformed for DriCloud
+    });
+
+    expect(res.status).toBe(400);
   });
 });
