@@ -1,0 +1,125 @@
+import { normalizePhone } from '../lib/phone';
+import { naiveLocalStringToDateTimeForDriCloud, parseDisponibilidad } from '../dricloud/mapper';
+import type { DriCloudDoctor, DriCloudEspecialidad, DriCloudPaciente } from '../dricloud/services';
+
+export interface GhlPacienteResponse {
+  pac_id: number;
+  nombre: string;
+  apellidos: string;
+  telefono: string;
+  email?: string;
+}
+
+export interface GhlSlot {
+  fecha: string;       // "yyyy-MM-dd"
+  hora_inicio: string; // "HH:mm"
+  hora_fin: string;    // "HH:mm"
+  medico: string;
+  especialidad: string | null;
+  consulta: number | null;
+}
+
+function stripAccents(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// ── Patient mappers ──────────────────────────────────────────────────────────
+
+export function mapPacienteToResponse(p: DriCloudPaciente): GhlPacienteResponse {
+  const result: GhlPacienteResponse = {
+    pac_id: p.PAC_ID,
+    nombre: p.PAC_NOMBRE,
+    apellidos: p.PAC_APELLIDOS,
+    telefono: p.PAC_TELEFONO1,
+  };
+  if (p.PAC_EMAIL) result.email = p.PAC_EMAIL;
+  return result;
+}
+
+export function buildPacienteCreate(
+  nombre: string,
+  apellidos: string,
+  telefono: string,
+): Omit<DriCloudPaciente, 'PAC_ID'> {
+  return {
+    PAC_NOMBRE: nombre,
+    PAC_APELLIDOS: apellidos,
+    PAC_TELEFONO1: normalizePhone(telefono),
+    PAC_FECHA_NACIMIENTO: '19000101', // unknown DOB placeholder
+    PAC_SEXO_ID: 0,
+  };
+}
+
+// ── Specialty resolution ─────────────────────────────────────────────────────
+
+export function resolveEspId(
+  especialidadName: string,
+  especialidades: DriCloudEspecialidad[],
+): number | null {
+  if (!especialidadName) return null;
+  const needle = stripAccents(especialidadName.toLowerCase().trim());
+  const match = especialidades.find(
+    (e) => stripAccents(e.ESP_NOMBRE.toLowerCase().trim()) === needle,
+  );
+  return match?.ESP_ID ?? null;
+}
+
+// ── Slot shape ───────────────────────────────────────────────────────────────
+
+export function slotToGhlShape(
+  rawDisp: string,
+  doctor: DriCloudDoctor,
+  espNombre: string | null,
+): GhlSlot {
+  const { date, minutes, desId } = parseDisponibilidad(rawDisp);
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const fecha = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  const hora_inicio = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+
+  const endDate = new Date(date.getTime() + minutes * 60000);
+  const hora_fin = `${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+
+  return {
+    fecha,
+    hora_inicio,
+    hora_fin,
+    medico: `${doctor.USU_NOMBRE} ${doctor.USU_APELLIDOS}`.trim(),
+    especialidad: espNombre,
+    consulta: desId || null,
+  };
+}
+
+// ── Confirmation message ─────────────────────────────────────────────────────
+
+const DAYS_ES = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MONTHS_ES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+];
+
+export function buildConfirmacionMessage(slot: GhlSlot, doctorFullName: string): string {
+  const [yearStr, monthStr, dayStr] = slot.fecha.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  const date = new Date(year, month - 1, day);
+  const dayName = DAYS_ES[date.getDay()];
+  const monthName = MONTHS_ES[month - 1];
+  const espPart = slot.especialidad ? ` (${slot.especialidad})` : '';
+  return (
+    `Su cita ha sido confirmada para el ${dayName} ${day} de ${monthName}` +
+    ` a las ${slot.hora_inicio}h con ${doctorFullName}${espPart}.`
+  );
+}
+
+// ── Date/time for createCita ─────────────────────────────────────────────────
+
+/**
+ * Combines separate "yyyy-MM-dd" and "HH:mm" strings into the "yyyyMMddHHmm"
+ * format required by DriCloud's createCita.
+ * Delegates to naiveLocalStringToDateTimeForDriCloud so timezone safety is guaranteed.
+ */
+export function naiveDateTimeFromSlot(fecha: string, hora: string): string {
+  return naiveLocalStringToDateTimeForDriCloud(`${fecha}T${hora}`);
+}
