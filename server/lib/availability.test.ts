@@ -5,7 +5,7 @@ import {
   formatDateForAvailabilityQuery,
 } from '@shared/availability';
 
-// Helpers to build DriCloud slot objects
+// Helpers to build DriCloud slot objects using the new localDateString contract.
 function slot(
   year: number,
   month: number, // 1-based
@@ -14,9 +14,58 @@ function slot(
   minute: number,
   minutes = 30,
   desId = 1
-): { date: Date; minutes: number; desId: number } {
-  return { date: new Date(year, month - 1, day, hour, minute), minutes, desId };
+): { localDateString: string; minutes: number; desId: number } {
+  const yyyy = String(year);
+  const mo = String(month).padStart(2, '0');
+  const dd = String(day).padStart(2, '0');
+  const hh = String(hour).padStart(2, '0');
+  const mi = String(minute).padStart(2, '0');
+  return { localDateString: `${yyyy}-${mo}-${dd}T${hh}:${mi}`, minutes, desId };
 }
+
+// Simulates a JSON-deserialized slot as the browser client receives it after
+// the W5 fix. The server now returns localDateString ("yyyy-MM-ddTHH:mm") — a
+// plain string that survives JSON serialization without TZ conversion.
+// This helper produces a slot as it would appear in the client's parsed JSON.
+function jsonRoundTrippedSlot(
+  wallClockNaive: string, // naive local datetime, e.g. "2026-06-23T09:00"
+  _serverOffsetHours: number, // retained for documentation; irrelevant after fix
+  minutes = 30,
+  desId = 1
+): { localDateString: string; minutes: number; desId: number } {
+  // After the fix, the server sends localDateString directly — no TZ conversion
+  // occurs in transit. The naive string is preserved exactly.
+  return { localDateString: wallClockNaive, minutes, desId };
+}
+
+// ── W5: availabilityToSlotSet must work with JSON-deserialized string dates ────
+//
+// When the client calls response.json() on the server's availability response,
+// slot.date is a UTC ISO string ("2026-06-23T07:00:00.000Z"), NOT a Date object.
+// availabilityToSlotSet must extract the correct wall-clock HH:MM regardless of
+// the TZ offset embedded in the UTC string.
+
+describe('W5 — availabilityToSlotSet handles JSON-deserialized string dates', () => {
+  it('returns the correct wall-clock HH:MM when slot arrives as a naive local string (server UTC+2)', () => {
+    // After W5 fix: server sends localDateString "2026-06-23T09:00" — no TZ drift.
+    // Previously the server sent date: new Date(2026,5,23,9,0) which JSON-serialized
+    // to UTC "2026-06-23T07:00:00.000Z", making getHours() return undefined (string).
+    const targetDate = new Date(2026, 5, 23); // June 23 2026
+    const slots = [jsonRoundTrippedSlot('2026-06-23T09:00', 2)];
+    const result = availabilityToSlotSet(slots, targetDate);
+    // The displayed slot must be 09:00 — the original wall-clock time.
+    expect(result.has('09:00')).toBe(true);
+    expect(result.size).toBe(1);
+  });
+
+  it('excludes a JSON-deserialized slot from a different calendar day', () => {
+    // Server wall-clock: 2026-06-24 09:00 — different day from target (June 23).
+    const targetDate = new Date(2026, 5, 23); // looking at June 23
+    const slots = [jsonRoundTrippedSlot('2026-06-24T09:00', 2)];
+    const result = availabilityToSlotSet(slots, targetDate);
+    expect(result.size).toBe(0);
+  });
+});
 
 describe('availabilityToSlotSet', () => {
   const targetDate = new Date(2026, 5, 23); // June 23 2026 (month is 0-based)

@@ -598,7 +598,7 @@ describe('SHOULD-FIX 3 — POST /api/dricloud/appointments rejects patientPhone 
       patientEmail: 'attacker@example.com',
       patientPhone: phoneB, // different phone — must be rejected
       patientAge: 30,
-      appointmentDate: new Date('2027-04-01T10:00:00Z').toISOString(),
+      appointmentDate: '2027-04-01T10:00', // naive local format — documents the real contract
     });
 
     expect(res.status).toBe(403);
@@ -656,6 +656,54 @@ describe('SHOULD-FIX 3 — POST /api/dricloud/appointments rejects patientPhone 
   });
 });
 
+// ── W2-consistency: cancel and GET 403 must return the same Spanish message ───
+//
+// PR #12 updated POST and PUT ownership 403s to a user-readable Spanish message.
+// These tests ensure the cancel route and GET appointments route are consistent.
+
+describe('W2-consistency — cancel and GET 403 return user-readable Spanish message', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('POST /cancel 403 body contains user-readable Spanish message (not "Forbidden")', async () => {
+    const phoneA = '+34688001001';
+    const phoneB = '+34688001002'; // owns the appointment
+
+    (dricloudServices.getCitaById as ReturnType<typeof vi.fn>).mockResolvedValue({
+      CPA_ID: 801, USU_ID: 1, PAC_TELEFONO1: phoneB,
+    });
+
+    const { app } = await createApp();
+    const agentA = await authenticatedAgent(app, phoneA);
+
+    const res = await agentA.post('/api/dricloud/appointments/801/cancel');
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).not.toBe('Forbidden');
+    expect(res.body.error.toLowerCase()).toMatch(/tel[eé]fono/);
+  });
+
+  it('GET /api/dricloud/appointments 403 body contains user-readable Spanish message (not "Forbidden")', async () => {
+    const phoneA = '+34688002001';
+    const phoneB = '+34688002002'; // phone stored in DriCloud for the patient
+
+    (dricloudServices.getPacienteByNIF as ReturnType<typeof vi.fn>).mockResolvedValue({
+      Exists: true,
+      Paciente: { PAC_ID: 20, PAC_NOMBRE: 'Other', PAC_APELLIDOS: 'Patient', PAC_TELEFONO1: phoneB, PAC_FECHA_NACIMIENTO: '19900101', PAC_SEXO_ID: 0 },
+    });
+
+    const { app } = await createApp();
+    const agentA = await authenticatedAgent(app, phoneA);
+
+    const res = await agentA.get('/api/dricloud/appointments?nif=Z8888888W');
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).not.toBe('Forbidden');
+    expect(res.body.error.toLowerCase()).toMatch(/tel[eé]fono/);
+  });
+});
+
 // ── C1: malformed appointmentDate must return 400, not hang ───────────────────
 //
 // Proves that a synchronous throw from naiveLocalStringToDateTimeForDriCloud
@@ -672,13 +720,10 @@ describe('C1 — malformed appointmentDate returns 400 (not 500 or hang)', () =>
   it('POST /api/dricloud/appointments: returns 400 when appointmentDate is ISO with Z (not naive)', async () => {
     const phoneA = '+34699001001';
 
-    // Ownership must pass — mock patient lookup and cita creation so the route
-    // reaches the date conversion step and not a 403.
-    (dricloudServices.getPacientePorNombreTelefono as ReturnType<typeof vi.fn>).mockResolvedValue({
-      Exists: true,
-      Paciente: { PAC_ID: 1 },
-    });
-    (dricloudServices.createCita as ReturnType<typeof vi.fn>).mockResolvedValue({ CPA_ID: 1 });
+    // No service mocks needed: date conversion fires before any DriCloud service
+    // call is made (naiveLocalStringToDateTimeForDriCloud throws at line ~364,
+    // before getPacientePorNombreTelefono or createCita are reached).
+    // Ownership passes because patientPhone === sessionPhone.
 
     const { app } = await createApp();
     const agentA = await authenticatedAgent(app, phoneA);
@@ -693,6 +738,7 @@ describe('C1 — malformed appointmentDate returns 400 (not 500 or hang)', () =>
     });
 
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Formato de fecha de cita inválido.');
   });
 
   it('PUT /api/dricloud/appointments/:id: returns 400 when appointmentDate is ISO with Z (not naive)', async () => {
@@ -712,5 +758,6 @@ describe('C1 — malformed appointmentDate returns 400 (not 500 or hang)', () =>
     });
 
     expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Formato de fecha de cita inválido.');
   });
 });
