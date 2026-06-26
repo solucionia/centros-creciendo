@@ -11,6 +11,7 @@ import {
   naiveLocalStringToDateTimeForDriCloud,
   formatDateTimeForDriCloud,
   formatDateForDriCloud,
+  parseDisponibilidad,
 } from './mapper';
 
 // ── naiveLocalStringToDateTimeForDriCloud ────────────────────────────────────
@@ -108,5 +109,36 @@ describe('formatDateTimeForDriCloud', () => {
     // We construct a local date directly so the test matches regardless of machine TZ.
     const d = new Date(2025, 6, 15, 10, 30); // local July 15 2025 10:30
     expect(formatDateTimeForDriCloud(d)).toBe('202507151030');
+  });
+});
+
+// ── parseDisponibilidad ───────────────────────────────────────────────────────
+//
+// W5: parseDisponibilidad must return a naive local string ("yyyy-MM-ddTHH:mm"),
+// NOT a Date object. This prevents TZ drift across the server-to-client JSON
+// boundary: JSON.stringify(Date) produces a UTC ISO string, which would shift the
+// displayed slot time when the server TZ differs from the browser TZ.
+
+describe('parseDisponibilidad', () => {
+  it('returns localDateString "2026-06-23T09:00" for "202606230900:30:1"', () => {
+    const result = parseDisponibilidad('202606230900:30:1');
+    expect(result.localDateString).toBe('2026-06-23T09:00');
+  });
+
+  it('parses minutes and desId correctly', () => {
+    const result = parseDisponibilidad('202606230900:30:5');
+    expect(result.minutes).toBe(30);
+    expect(result.desId).toBe(5);
+  });
+
+  it('localDateString does NOT contain "Z" or UTC offset (must be naive)', () => {
+    const result = parseDisponibilidad('202606230900:30:1');
+    expect(result.localDateString).not.toMatch(/Z|[+-]\d{2}:\d{2}/);
+  });
+
+  it('preserves wall-clock time exactly — "T09:00" regardless of machine TZ', () => {
+    // Pure string slicing: no Date constructor, so no TZ conversion can occur.
+    const result = parseDisponibilidad('202606230900:30:1');
+    expect(result.localDateString.slice(11)).toBe('09:00');
   });
 });

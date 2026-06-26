@@ -88,11 +88,17 @@ export function naiveLocalStringToDateTimeForDriCloud(naiveLocalString: string):
 }
 
 /**
- * Parsea la disponibilidad de DriCloud
- * Formato: "yyyyMMddHHmm:<MinCita>:<DES_ID>"
+ * Parsea la disponibilidad de DriCloud.
+ * Formato de entrada: "yyyyMMddHHmm:<MinCita>:<DES_ID>"
+ *
+ * Returns localDateString as "yyyy-MM-ddTHH:mm" (naive local, no TZ designator)
+ * instead of a Date object. This prevents timezone drift when the value crosses
+ * the server-to-client JSON boundary: a Date serialized by JSON.stringify becomes
+ * a UTC ISO string, which shifts the displayed time when server TZ != browser TZ.
+ * Pure string manipulation preserves the wall-clock intent exactly.
  */
 export function parseDisponibilidad(disponibilidad: string): {
-  date: Date;
+  localDateString: string;
   minutes: number;
   desId: number;
 } {
@@ -101,16 +107,17 @@ export function parseDisponibilidad(disponibilidad: string): {
   const minutes = parseInt(parts[1]);
   const desId = parseInt(parts[2]);
 
-  const year = parseInt(dateTimeStr.substring(0, 4));
-  const month = parseInt(dateTimeStr.substring(4, 6)) - 1;
-  const day = parseInt(dateTimeStr.substring(6, 8));
-  const hours = parseInt(dateTimeStr.substring(8, 10));
-  const mins = parseInt(dateTimeStr.substring(10, 12));
+  // Build "yyyy-MM-ddTHH:mm" via pure string slicing — no Date constructor involved.
+  const yyyy = dateTimeStr.substring(0, 4);
+  const mo = dateTimeStr.substring(4, 6);
+  const dd = dateTimeStr.substring(6, 8);
+  const hh = dateTimeStr.substring(8, 10);
+  const mi = dateTimeStr.substring(10, 12);
 
   return {
-    date: new Date(year, month, day, hours, mins),
+    localDateString: `${yyyy}-${mo}-${dd}T${hh}:${mi}`,
     minutes,
-    desId
+    desId,
   };
 }
 

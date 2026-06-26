@@ -495,7 +495,9 @@ export function registerDriCloudRoutes(app: Express) {
 
     const citaPhone = normalizePhone(cita.PAC_TELEFONO1 ?? '');
     if (!citaPhone || citaPhone !== sessionPhone) {
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(403).json({
+        error: 'El teléfono no coincide con el de tu cuenta. Usa el mismo teléfono con el que iniciaste sesión.',
+      });
     }
 
     try {
@@ -537,7 +539,9 @@ export function registerDriCloudRoutes(app: Express) {
     const patientPhone = normalizePhone(pacienteResult.Paciente.PAC_TELEFONO1);
     // Guard: reject empty patient phone to prevent false '' === '' matches.
     if (!patientPhone || patientPhone !== sessionPhone) {
-      return res.status(403).json({ error: 'Forbidden' });
+      return res.status(403).json({
+        error: 'El teléfono no coincide con el de tu cuenta. Usa el mismo teléfono con el que iniciaste sesión.',
+      });
     }
 
     // Phase 2: ownership confirmed — fetch the actual appointment data.
