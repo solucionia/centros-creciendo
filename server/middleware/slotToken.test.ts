@@ -68,4 +68,14 @@ describe('encodeSlot / decodeSlot', () => {
     delete process.env.GHL_MIDDLEWARE_SECRET;
     expect(() => encodeSlot(samplePayload)).toThrow(/GHL_MIDDLEWARE_SECRET/);
   });
+
+  it('throws InvalidSlotError when payload is missing required field u', () => {
+    // Build a validly-signed token wrapping a payload missing `u`
+    const { createHmac } = require('crypto');
+    const incomplete = { f: '2026-07-10', h: '09:00', t: 7, d: 3, m: 30, esp: 5 };
+    const payloadB64 = Buffer.from(JSON.stringify(incomplete)).toString('base64url');
+    const sig = createHmac('sha256', SECRET).update(payloadB64).digest('base64url');
+    const token = `${payloadB64}.${sig}`;
+    expect(() => decodeSlot(token)).toThrow(InvalidSlotError);
+  });
 });

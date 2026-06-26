@@ -58,11 +58,32 @@ export function decodeSlot(token: string): SlotPayload {
 
   if (!same) throw new InvalidSlotError('signature mismatch');
 
-  let payload: SlotPayload;
+  let raw: unknown;
   try {
-    payload = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    raw = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
   } catch {
     throw new InvalidSlotError('payload is not valid JSON');
   }
-  return payload;
+
+  if (
+    raw === null ||
+    typeof raw !== 'object' ||
+    typeof (raw as Record<string, unknown>).u !== 'number' ||
+    typeof (raw as Record<string, unknown>).f !== 'string' ||
+    typeof (raw as Record<string, unknown>).h !== 'string' ||
+    typeof (raw as Record<string, unknown>).t !== 'number' ||
+    !(
+      typeof (raw as Record<string, unknown>).d === 'number' ||
+      (raw as Record<string, unknown>).d === null
+    ) ||
+    typeof (raw as Record<string, unknown>).m !== 'number' ||
+    !(
+      typeof (raw as Record<string, unknown>).esp === 'number' ||
+      (raw as Record<string, unknown>).esp === null
+    )
+  ) {
+    throw new InvalidSlotError('payload shape invalid');
+  }
+
+  return raw as SlotPayload;
 }

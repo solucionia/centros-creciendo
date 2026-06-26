@@ -202,11 +202,11 @@ describe('POST /api/ghl/citas/slots-disponibles', () => {
     expect(res.body.slots[0].hora_inicio).toBe('09:00');
   });
 
-  it('caps results at 10 slots', async () => {
-    // 15 slots all on 2026-07-10, hours 08:00 to 22:00
+  it('caps results at exactly 10 slots when more than 10 are available', async () => {
+    // 15 slots all on 2026-07-10, hours 09:00 to 23:00 — all well-formed 12-char yyyyMMddHHmm
     const slots15 = Array.from({ length: 15 }, (_, i) => {
-      const h = String(8 + i).padStart(2, '0');
-      return `202607100${h}00:30:3`;
+      const h = String(9 + i).padStart(2, '0');
+      return `20260710${h}00:30:3`;
     });
     (svc.getAgendaDisponibilidad as ReturnType<typeof vi.fn>).mockResolvedValue({
       Disponibilidad: slots15,
@@ -218,7 +218,7 @@ describe('POST /api/ghl/citas/slots-disponibles', () => {
       .send({ ...baseBody, fecha_hasta: '2026-07-10' });
 
     expect(res.status).toBe(200);
-    expect(res.body.slots.length).toBeLessThanOrEqual(10);
+    expect(res.body.slots).toHaveLength(10);
   });
 
   it('returns NO_SLOTS (HTTP 200, success:false) when no slots', async () => {
@@ -340,9 +340,9 @@ describe('POST /api/ghl/citas/reservar', () => {
     }));
   });
 
-  it('returns 409 (SLOT_NO_DISPONIBLE) when DriCloud rejects the slot', async () => {
+  it('returns 409 (SLOT_NO_DISPONIBLE) when createCita throws a slot-conflict error', async () => {
     (svc.createCita as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('slot already taken'),
+      new Error('El horario no está disponible para reserva'),
     );
     const { app } = await createApp();
     const slot_id = makeSlotId();
@@ -353,6 +353,36 @@ describe('POST /api/ghl/citas/reservar', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.codigo_error).toBe('SLOT_NO_DISPONIBLE');
+  });
+
+  it('returns 500 (DRICLOUD_ERROR) when createCita throws a generic error', async () => {
+    (svc.createCita as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('network down'),
+    );
+    const { app } = await createApp();
+    const slot_id = makeSlotId();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'crm-001', slot_id });
+
+    expect(res.status).toBe(500);
+    expect(res.body.codigo_error).toBe('DRICLOUD_ERROR');
+  });
+
+  it('returns 200 success:true even when getDoctores throws after successful createCita', async () => {
+    (svc.createCita as ReturnType<typeof vi.fn>).mockResolvedValue({ CPA_ID: 456 });
+    (svc.getDoctores as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('lookup failed'));
+    const { app } = await createApp();
+    const slot_id = makeSlotId();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'crm-001', slot_id });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.cita.id_cita_dricloud).toBe(456);
   });
 });
 
@@ -389,6 +419,18 @@ describe('POST /api/ghl/citas/cancelar', () => {
       .send({ id_dricloud: 10, crm_contact_id: 'x' });
     expect(res.status).toBe(400);
     expect(res.body.codigo_error).toBe('DATOS_INCOMPLETOS');
+  });
+
+  it('does NOT reject id_dricloud === 0 as DATOS_INCOMPLETOS', async () => {
+    (svc.getCitaById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    const { app } = await createApp();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 0, id_cita_dricloud: 555, crm_contact_id: 'crm-001' });
+    // 0 is a valid id — it must NOT be rejected as DATOS_INCOMPLETOS
+    expect(res.body.codigo_error).not.toBe('DATOS_INCOMPLETOS');
+    expect(res.status).not.toBe(400);
   });
 
   it('returns 404 (PACIENTE_NO_ENCONTRADO) when getCitaById returns null', async () => {
