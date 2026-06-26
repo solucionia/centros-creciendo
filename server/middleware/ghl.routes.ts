@@ -109,12 +109,12 @@ export function registerGhlRoutes(app: Express): void {
       }
 
       const filtered = allRawSlots.filter(({ raw }) => {
-        const { date } = parseDisponibilidad(raw);
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const slotDate = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+        const { localDateString } = parseDisponibilidad(raw);
+        const slotDate = localDateString.slice(0, 10);
         if (slotDate < fecha_desde || slotDate > fecha_hasta) return false;
-        if (preferencia_horaria === 'mañana' && date.getHours() >= 14) return false;
-        if (preferencia_horaria === 'tarde' && date.getHours() < 14) return false;
+        const slotHour = parseInt(localDateString.slice(11, 13), 10);
+        if (preferencia_horaria === 'mañana' && slotHour >= 14) return false;
+        if (preferencia_horaria === 'tarde' && slotHour < 14) return false;
         return true;
       });
 
@@ -124,10 +124,9 @@ export function registerGhlRoutes(app: Express): void {
 
       const capped = filtered.slice(0, 10);
       const slots = capped.map(({ raw, doc }) => {
-        const { date, minutes, desId } = parseDisponibilidad(raw);
-        const pad = (n: number) => String(n).padStart(2, '0');
-        const fecha = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-        const hora = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+        const { localDateString, minutes, desId } = parseDisponibilidad(raw);
+        const fecha = localDateString.slice(0, 10);
+        const hora = localDateString.slice(11, 16);
 
         const espId = doc.ListadoESPECIALIDAD[0]?.ESP_ID ?? null;
         const espObj = espId ? especialidades.find((e) => e.ESP_ID === espId) : null;

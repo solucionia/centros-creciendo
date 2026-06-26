@@ -87,11 +87,10 @@ export function slotToGhlShape(
   doctor: DriCloudDoctor,
   espNombre: string | null,
 ): GhlSlot {
-  const { date, minutes, desId } = parseDisponibilidad(rawDisp);
+  const { localDateString, minutes, desId } = parseDisponibilidad(rawDisp);
 
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const fecha = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  const hora_inicio = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const fecha = localDateString.slice(0, 10);
+  const hora_inicio = localDateString.slice(11, 16);
   const hora_fin = addMinutesToWallClock(hora_inicio, minutes);
 
   return {
