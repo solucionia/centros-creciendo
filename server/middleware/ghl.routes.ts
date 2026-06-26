@@ -229,4 +229,45 @@ export function registerGhlRoutes(app: Express): void {
       return sendError(res, 'SLOT_NO_DISPONIBLE', 'El slot ya no está disponible. Por favor, elige otro horario.');
     }
   });
+
+  // ── POST /api/ghl/citas/cancelar ────────────────────────────────────────────
+  app.post('/api/ghl/citas/cancelar', apiKeyAuth, async (req: Request, res: Response) => {
+    const { id_dricloud, id_cita_dricloud, crm_contact_id } = req.body ?? {};
+
+    if (!id_dricloud || !id_cita_dricloud || !crm_contact_id) {
+      return sendError(res, 'DATOS_INCOMPLETOS', 'Se requieren: id_dricloud, id_cita_dricloud, crm_contact_id.');
+    }
+
+    const cpaId = Number(id_cita_dricloud);
+
+    let cita: DriCloudCita | null;
+    try {
+      cita = await getCitaById(cpaId);
+    } catch {
+      return sendError(res, 'DRICLOUD_ERROR', 'Error al verificar la cita en DriCloud.');
+    }
+
+    if (!cita) {
+      return sendError(res, 'PACIENTE_NO_ENCONTRADO', `La cita ${cpaId} no existe.`);
+    }
+
+    // Ownership guard: PAC_ID on the appointment must match the patient's DriCloud ID
+    if (cita.PAC_ID !== Number(id_dricloud)) {
+      return res.status(403).json({
+        success: false,
+        codigo_error: 'FORBIDDEN',
+        mensaje: 'No tienes permiso para cancelar esta cita.',
+      });
+    }
+
+    try {
+      await deleteCita(cpaId);
+      return res.json({
+        success: true,
+        mensaje: 'Cita cancelada correctamente. El hueco ha quedado libre.',
+      });
+    } catch {
+      return sendError(res, 'DRICLOUD_ERROR', 'Error al cancelar la cita en DriCloud.');
+    }
+  });
 }

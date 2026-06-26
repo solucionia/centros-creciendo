@@ -355,3 +355,92 @@ describe('POST /api/ghl/citas/reservar', () => {
     expect(res.body.codigo_error).toBe('SLOT_NO_DISPONIBLE');
   });
 });
+
+// ── /api/ghl/citas/cancelar ──────────────────────────────────────────────────
+
+describe('POST /api/ghl/citas/cancelar', () => {
+  const url = '/api/ghl/citas/cancelar';
+
+  const validBody = {
+    id_dricloud: 10,
+    id_cita_dricloud: 555,
+    crm_contact_id: 'crm-001',
+  };
+
+  const ownedCita: import('../dricloud/services').DriCloudCita = {
+    CPA_ID: 555,
+    USU_ID: 5,
+    CPA_FECHA_INICIO: '202607100900',
+    CPA_FECHA_FIN: '202607100930',
+    PAC_ID: 10, // matches id_dricloud in validBody
+  };
+
+  it('returns 401 when API key is missing', async () => {
+    const { app } = await createApp();
+    const res = await request(app).post(url).send(validBody);
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 (DATOS_INCOMPLETOS) when id_cita_dricloud is missing', async () => {
+    const { app } = await createApp();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'x' });
+    expect(res.status).toBe(400);
+    expect(res.body.codigo_error).toBe('DATOS_INCOMPLETOS');
+  });
+
+  it('returns 404 (PACIENTE_NO_ENCONTRADO) when getCitaById returns null', async () => {
+    (svc.getCitaById as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    const { app } = await createApp();
+    const res = await request(app).post(url).set(authHeaders()).send(validBody);
+    expect(res.status).toBe(404);
+    expect(res.body.codigo_error).toBe('PACIENTE_NO_ENCONTRADO');
+  });
+
+  it('returns 403 and does NOT call deleteCita when PAC_ID mismatches id_dricloud', async () => {
+    (svc.getCitaById as ReturnType<typeof vi.fn>).mockResolvedValue({ ...ownedCita, PAC_ID: 999 });
+    (svc.deleteCita as ReturnType<typeof vi.fn>).mockResolvedValue({ CPA_ID: 555 });
+
+    const { app } = await createApp();
+    const res = await request(app).post(url).set(authHeaders()).send(validBody);
+
+    expect(res.status).toBe(403);
+    expect(svc.deleteCita).not.toHaveBeenCalled();
+  });
+
+  it('cancels and returns success message when ownership matches', async () => {
+    (svc.getCitaById as ReturnType<typeof vi.fn>).mockResolvedValue(ownedCita);
+    (svc.deleteCita as ReturnType<typeof vi.fn>).mockResolvedValue({ CPA_ID: 555 });
+
+    const { app } = await createApp();
+    const res = await request(app).post(url).set(authHeaders()).send(validBody);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.mensaje).toContain('Cita cancelada');
+    expect(svc.deleteCita).toHaveBeenCalledWith(555);
+  });
+
+  it('returns 500 (DRICLOUD_ERROR) when deleteCita throws', async () => {
+    (svc.getCitaById as ReturnType<typeof vi.fn>).mockResolvedValue(ownedCita);
+    (svc.deleteCita as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('network error'));
+
+    const { app } = await createApp();
+    const res = await request(app).post(url).set(authHeaders()).send(validBody);
+
+    expect(res.status).toBe(500);
+    expect(res.body.codigo_error).toBe('DRICLOUD_ERROR');
+  });
+
+  it('returns 500 (DRICLOUD_ERROR) when getCitaById throws', async () => {
+    (svc.getCitaById as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('DriCloud down'));
+
+    const { app } = await createApp();
+    const res = await request(app).post(url).set(authHeaders()).send(validBody);
+
+    expect(res.status).toBe(500);
+    expect(res.body.codigo_error).toBe('DRICLOUD_ERROR');
+  });
+});
