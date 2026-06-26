@@ -5,6 +5,7 @@ import { insertDoctorSchema, insertAppointmentSchema } from "@shared/schema";
 import { z } from "zod";
 import { registerDriCloudRoutes } from "./routes/dricloud.routes";
 import { registerAuthRoutes, requireAuth } from "./routes/auth.routes";
+import { registerGhlRoutes } from "./middleware/ghl.routes";
 import { normalizePhone } from "./lib/phone";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -12,6 +13,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAuthRoutes(app);
   // Registrar rutas de DriCloud
   registerDriCloudRoutes(app);
+  // Registrar rutas GHL middleware
+  registerGhlRoutes(app);
   // Doctor routes
   app.get('/api/doctors', async (req, res) => {
     try {
