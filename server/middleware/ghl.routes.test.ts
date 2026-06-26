@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app';
+import { encodeSlot } from './slotToken';
 
 // Mock the entire DriCloud service layer — same pattern as idor.security.test.ts
 vi.mock('../dricloud/services', async (importOriginal) => {
@@ -264,5 +265,93 @@ describe('POST /api/ghl/citas/slots-disponibles', () => {
     expect(res.status).toBe(200);
     expect(res.body.slots).toHaveLength(1);
     expect(res.body.slots[0].hora_inicio).toBe('15:00');
+  });
+});
+
+// ── /api/ghl/citas/reservar ──────────────────────────────────────────────────
+
+describe('POST /api/ghl/citas/reservar', () => {
+  const url = '/api/ghl/citas/reservar';
+
+  // Build a valid slot_id using the same secret set in beforeEach
+  function makeSlotId() {
+    return encodeSlot({ u: 5, f: '2026-07-10', h: '09:00', t: 7, d: 3, m: 30, esp: 5 });
+  }
+
+  const doctor = {
+    USU_ID: 5,
+    USU_NOMBRE: 'Ana',
+    USU_APELLIDOS: 'Martínez',
+    USU_EMAIL: 'ana@clinic.com',
+    ListadoESPECIALIDAD: [{ ESP_ID: 5 }],
+  };
+
+  beforeEach(() => {
+    (svc.getDoctores as ReturnType<typeof vi.fn>).mockResolvedValue([doctor]);
+    (svc.getEspecialidades as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { ESP_ID: 5, ESP_NOMBRE: 'Pediatría', ListadoTIPO_CITA: [] },
+    ]);
+    (svc.createCita as ReturnType<typeof vi.fn>).mockResolvedValue({ CPA_ID: 123 });
+  });
+
+  it('returns 401 when API key is missing', async () => {
+    const { app } = await createApp();
+    const res = await request(app).post(url).send({});
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 400 (DATOS_INCOMPLETOS) when slot_id is missing', async () => {
+    const { app } = await createApp();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'x' });
+    expect(res.status).toBe(400);
+    expect(res.body.codigo_error).toBe('DATOS_INCOMPLETOS');
+  });
+
+  it('returns 400 (DATOS_INCOMPLETOS) when slot_id is tampered', async () => {
+    const { app } = await createApp();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'x', slot_id: 'tampered.aaaaaa' });
+    expect(res.status).toBe(400);
+    expect(res.body.codigo_error).toBe('DATOS_INCOMPLETOS');
+  });
+
+  it('creates cita and returns success with mensaje_confirmacion', async () => {
+    const { app } = await createApp();
+    const slot_id = makeSlotId();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'crm-001', slot_id });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.cita.id_cita_dricloud).toBe(123);
+    expect(res.body.cita.crm_calendar_id).toBeNull();
+    expect(res.body.cita.mensaje_confirmacion).toContain('09:00');
+    expect(svc.createCita).toHaveBeenCalledWith(expect.objectContaining({
+      usuId: 5,
+      pacId: 10,
+      fechaInicioCitaString: '202607100900',
+    }));
+  });
+
+  it('returns 409 (SLOT_NO_DISPONIBLE) when DriCloud rejects the slot', async () => {
+    (svc.createCita as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('slot already taken'),
+    );
+    const { app } = await createApp();
+    const slot_id = makeSlotId();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'crm-001', slot_id });
+
+    expect(res.status).toBe(409);
+    expect(res.body.codigo_error).toBe('SLOT_NO_DISPONIBLE');
   });
 });

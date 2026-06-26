@@ -151,4 +151,82 @@ export function registerGhlRoutes(app: Express): void {
       return sendError(res, 'DRICLOUD_ERROR', 'Error al obtener disponibilidad de DriCloud.');
     }
   });
+
+  // ── POST /api/ghl/citas/reservar ────────────────────────────────────────────
+  app.post('/api/ghl/citas/reservar', apiKeyAuth, async (req: Request, res: Response) => {
+    const { id_dricloud, crm_contact_id, slot_id } = req.body ?? {};
+
+    if (!id_dricloud || !crm_contact_id || !slot_id) {
+      return sendError(res, 'DATOS_INCOMPLETOS', 'Se requieren: id_dricloud, crm_contact_id, slot_id.');
+    }
+
+    let payload: SlotPayload;
+    try {
+      payload = decodeSlot(slot_id);
+    } catch (err) {
+      if (err instanceof InvalidSlotError) {
+        return sendError(res, 'DATOS_INCOMPLETOS', 'El slot_id es inválido o ha sido manipulado.');
+      }
+      return sendError(res, 'DRICLOUD_ERROR', 'Error al verificar el slot_id.');
+    }
+
+    const fechaInicioCitaString = naiveDateTimeFromSlot(payload.f, payload.h);
+
+    try {
+      const created = await createCita({
+        usuId: payload.u,
+        fechaInicioCitaString,
+        pacId: Number(id_dricloud),
+        tciId: payload.t || undefined,
+        desId: payload.d ?? undefined,
+        cliId: DRICLOUD_CONFIG.clinicaId,
+      });
+
+      // Build hora_fin from slot duration
+      const [hh, mm] = payload.h.split(':').map(Number);
+      const endMinutes = hh * 60 + mm + payload.m;
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const hora_fin = `${pad(Math.floor(endMinutes / 60))}:${pad(endMinutes % 60)}`;
+
+      // Resolve doctor name and specialty for the confirmation message
+      const allDoctors = await getDoctores();
+      const doctor = allDoctors.find((d) => d.USU_ID === payload.u);
+      const doctorName = doctor
+        ? `${doctor.USU_NOMBRE} ${doctor.USU_APELLIDOS}`.trim()
+        : `Doctor ${payload.u}`;
+
+      const especialidades = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      const espObj = payload.esp ? especialidades.find((e) => e.ESP_ID === payload.esp) : null;
+      const espNombre = espObj?.ESP_NOMBRE ?? null;
+
+      const slot: GhlSlot = {
+        fecha: payload.f,
+        hora_inicio: payload.h,
+        hora_fin,
+        medico: doctorName,
+        especialidad: espNombre,
+        consulta: payload.d,
+      };
+
+      const mensaje_confirmacion = buildConfirmacionMessage(slot, doctorName);
+
+      return res.json({
+        success: true,
+        cita: {
+          id_cita_dricloud: created.CPA_ID,
+          fecha: payload.f,
+          hora_inicio: payload.h,
+          hora_fin,
+          medico: doctorName,
+          especialidad: espNombre,
+          consulta: payload.d,
+          localizacion: null,
+          crm_calendar_id: null,
+          mensaje_confirmacion,
+        },
+      });
+    } catch {
+      return sendError(res, 'SLOT_NO_DISPONIBLE', 'El slot ya no está disponible. Por favor, elige otro horario.');
+    }
+  });
 }
