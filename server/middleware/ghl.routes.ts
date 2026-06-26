@@ -21,9 +21,11 @@ import {
   type DriCloudCita,
 } from '../dricloud/services';
 import { parseDisponibilidad } from '../dricloud/mapper';
-import { resolveEspId, slotToGhlShape, buildConfirmacionMessage, type GhlSlot } from './ghlMappers';
+import { resolveEspId, slotToGhlShape, buildConfirmacionMessage, addMinutesToWallClock, type GhlSlot } from './ghlMappers';
 import { encodeSlot, decodeSlot, InvalidSlotError, type SlotPayload } from './slotToken';
 import { DRICLOUD_CONFIG } from '../dricloud/auth';
+
+const SLOT_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 export function registerGhlRoutes(app: Express): void {
 
@@ -140,6 +142,7 @@ export function registerGhlRoutes(app: Express): void {
           d: desId || null,
           m: minutes,
           esp: espId,
+          exp: Date.now() + SLOT_TOKEN_TTL_MS,
         };
 
         const ghlSlot = slotToGhlShape(raw, doc, espNombre);
@@ -165,6 +168,14 @@ export function registerGhlRoutes(app: Express): void {
       payload = decodeSlot(slot_id);
     } catch (err) {
       if (err instanceof InvalidSlotError) {
+        if ((err as Error).message.includes('expired')) {
+          return res.status(409).json({
+            success: false,
+            codigo_error: 'SLOT_NO_DISPONIBLE',
+            mensaje: 'El horario seleccionado ha caducado. Por favor, vuelve a consultar la disponibilidad.',
+            accion_sugerida: 'reconsultar',
+          });
+        }
         return sendError(res, 'DATOS_INCOMPLETOS', 'El slot_id es inválido o ha sido manipulado.');
       }
       return sendError(res, 'DRICLOUD_ERROR', 'Error al verificar el slot_id.');
@@ -192,10 +203,7 @@ export function registerGhlRoutes(app: Express): void {
     }
 
     // Build hora_fin from slot duration
-    const [hh, mm] = payload.h.split(':').map(Number);
-    const endMinutes = hh * 60 + mm + payload.m;
-    const pad = (n: number) => String(n).padStart(2, '0');
-    const hora_fin = `${pad(Math.floor(endMinutes / 60))}:${pad(endMinutes % 60)}`;
+    const hora_fin = addMinutesToWallClock(payload.h, payload.m);
 
     // Resolve doctor name and specialty for the confirmation message.
     // This enrichment is best-effort: a DriCloud lookup failure must NOT fail a booking that already succeeded.

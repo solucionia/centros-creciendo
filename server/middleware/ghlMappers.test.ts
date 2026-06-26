@@ -6,6 +6,7 @@ import {
   slotToGhlShape,
   buildConfirmacionMessage,
   naiveDateTimeFromSlot,
+  addMinutesToWallClock,
 } from './ghlMappers';
 import type { DriCloudDoctor, DriCloudEspecialidad, DriCloudPaciente } from '../dricloud/services';
 
@@ -122,5 +123,25 @@ describe('naiveDateTimeFromSlot', () => {
 
   it('throws for malformed fecha (yyyyMMdd instead of yyyy-MM-dd)', () => {
     expect(() => naiveDateTimeFromSlot('20260710', '09:00')).toThrow();
+  });
+});
+
+describe('addMinutesToWallClock', () => {
+  it('adds minutes within the same hour', () => {
+    expect(addMinutesToWallClock('09:50', 20)).toBe('10:10');
+  });
+
+  it('wraps past midnight correctly', () => {
+    expect(addMinutesToWallClock('23:50', 20)).toBe('00:10');
+  });
+
+  it('adds zero minutes — returns same time', () => {
+    expect(addMinutesToWallClock('14:00', 0)).toBe('14:00');
+  });
+
+  it('result matches slotToGhlShape hora_fin for the same slot', () => {
+    // rawDisp '202607100950:20:3' → hora_inicio 09:50, duration 20 min → hora_fin 10:10
+    const slot = slotToGhlShape('202607100950:20:3', sampleDoctor, null);
+    expect(slot.hora_fin).toBe(addMinutesToWallClock('09:50', 20));
   });
 });

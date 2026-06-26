@@ -64,6 +64,22 @@ export function resolveEspId(
   return match?.ESP_ID ?? null;
 }
 
+// ── Wall-clock arithmetic ────────────────────────────────────────────────────
+
+/**
+ * Adds `minutes` to a "HH:mm" wall-clock string using pure integer math.
+ * No Date objects — no DST sensitivity.
+ * Wraps past midnight (e.g. "23:50" + 20 → "00:10").
+ */
+export function addMinutesToWallClock(hora: string, minutes: number): string {
+  const [hhStr, mmStr] = hora.split(':');
+  const total = parseInt(hhStr, 10) * 60 + parseInt(mmStr, 10) + minutes;
+  const HH = Math.floor(total / 60) % 24;
+  const MM = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(HH)}:${pad(MM)}`;
+}
+
 // ── Slot shape ───────────────────────────────────────────────────────────────
 
 export function slotToGhlShape(
@@ -76,9 +92,7 @@ export function slotToGhlShape(
   const pad = (n: number) => String(n).padStart(2, '0');
   const fecha = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   const hora_inicio = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-
-  const endDate = new Date(date.getTime() + minutes * 60000);
-  const hora_fin = `${pad(endDate.getHours())}:${pad(endDate.getMinutes())}`;
+  const hora_fin = addMinutesToWallClock(hora_inicio, minutes);
 
   return {
     fecha,

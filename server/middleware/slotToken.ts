@@ -8,6 +8,7 @@ export interface SlotPayload {
   d: number | null;
   m: number;
   esp: number | null;
+  exp: number;
 }
 
 export class InvalidSlotError extends Error {
@@ -80,10 +81,17 @@ export function decodeSlot(token: string): SlotPayload {
     !(
       typeof (raw as Record<string, unknown>).esp === 'number' ||
       (raw as Record<string, unknown>).esp === null
-    )
+    ) ||
+    typeof (raw as Record<string, unknown>).exp !== 'number'
   ) {
     throw new InvalidSlotError('payload shape invalid');
   }
 
-  return raw as SlotPayload;
+  const payload = raw as SlotPayload;
+
+  if (Date.now() > payload.exp) {
+    throw new InvalidSlotError('expired');
+  }
+
+  return payload;
 }

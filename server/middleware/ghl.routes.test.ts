@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { createApp } from '../app';
 import { encodeSlot } from './slotToken';
@@ -275,8 +275,12 @@ describe('POST /api/ghl/citas/reservar', () => {
 
   // Build a valid slot_id using the same secret set in beforeEach
   function makeSlotId() {
-    return encodeSlot({ u: 5, f: '2026-07-10', h: '09:00', t: 7, d: 3, m: 30, esp: 5 });
+    return encodeSlot({ u: 5, f: '2026-07-10', h: '09:00', t: 7, d: 3, m: 30, esp: 5, exp: Date.now() + 999999 });
   }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   const doctor = {
     USU_ID: 5,
@@ -383,6 +387,35 @@ describe('POST /api/ghl/citas/reservar', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.cita.id_cita_dricloud).toBe(456);
+  });
+
+  it('returns 409 (SLOT_NO_DISPONIBLE) with reconsultar when slot_id is expired', async () => {
+    vi.useFakeTimers();
+    const now = 1000000000000;
+    vi.setSystemTime(now);
+    // Build token that expires in 1 ms
+    const slot_id = encodeSlot({ u: 5, f: '2026-07-10', h: '09:00', t: 7, d: 3, m: 30, esp: 5, exp: now + 1 });
+    // Advance time past expiry
+    vi.setSystemTime(now + 2);
+    const { app } = await createApp();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'crm-001', slot_id });
+
+    expect(res.status).toBe(409);
+    expect(res.body.codigo_error).toBe('SLOT_NO_DISPONIBLE');
+    expect(res.body.accion_sugerida).toBe('reconsultar');
+  });
+
+  it('returns 400 (DATOS_INCOMPLETOS) when slot_id is tampered (not expired)', async () => {
+    const { app } = await createApp();
+    const res = await request(app)
+      .post(url)
+      .set(authHeaders())
+      .send({ id_dricloud: 10, crm_contact_id: 'x', slot_id: 'tampered.aaaaaa' });
+    expect(res.status).toBe(400);
+    expect(res.body.codigo_error).toBe('DATOS_INCOMPLETOS');
   });
 });
 
