@@ -264,7 +264,7 @@ export function registerGhlRoutes(app: Express): void {
 
     let cita: DriCloudCita | null;
     try {
-      cita = await getCitaById(cpaId);
+      cita = await getCitaById(cpaId, Number(id_dricloud));
     } catch {
       return sendError(res, 'DRICLOUD_ERROR', 'Error al verificar la cita en DriCloud.');
     }

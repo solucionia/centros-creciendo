@@ -248,13 +248,25 @@ export async function createCita(params: {
 }
 
 /**
- * Fetch a single appointment by its CPA_ID.
+ * Fetch a single appointment by its CPA_ID (and optional PAC_ID).
  * Used by ownership guards before any mutation.
- * Returns null when the appointment is not found.
+ *
+ * NOTA: DriCloud NO expone un endpoint 'GetCitaPorId' (404). Para localizar una cita
+ * se usa GetCitasPacientes (por PAC_ID + fecha, diasRecuperar máx 31) y se filtra el
+ * CPA_ID. Por eso hace falta el pacId para acotar la consulta.
  */
-export async function getCitaById(cpaId: number): Promise<DriCloudCita | null> {
-  const result = await driCloudRequest<DriCloudCita | null>('GetCitaPorId', { CPA_ID: cpaId });
-  return result ?? null;
+export async function getCitaById(cpaId: number, pacId?: number): Promise<DriCloudCita | null> {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('es-ES', { timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? '00';
+  const fecha = get('year') + get('month') + get('day');
+
+  const body: Record<string, unknown> = { fecha, diasRecuperar: 31 };
+  if (pacId !== undefined) body.PAC_ID = pacId;
+
+  const result = await driCloudRequest<{ Citas?: DriCloudCita[] } | DriCloudCita[]>('GetCitasPacientes', body);
+  const list: DriCloudCita[] = Array.isArray(result) ? result : ((result as any).Citas ?? []);
+  return list.find((c) => c.CPA_ID === cpaId) ?? null;
 }
 
 export async function updateCita(params: {
