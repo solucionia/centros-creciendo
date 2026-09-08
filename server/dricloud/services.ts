@@ -10,6 +10,27 @@ export interface DriCloudClinica {
   CLI_MAIL: string;
 }
 
+// Caché del CLI_ID real (de GetClinicas). El `DRICLOUD_CONFIG.clinicaId` del login
+// (idClinica, ej. 20627) NO es el `CLI_ID` que usan los endpoints de datos
+// (ej. 1). Sin esta resolución, GetDespachos/GetEspecialidades/GetAgendaDisponibilidad
+// devuelven vacío y la agenda parece "sin publicar".
+let clinicaIdCache: number | null = null;
+
+/**
+ * Devuelve el CLI_ID interno de la clínica (de GetClinicas). En esta integración
+ * coincide con el primer CLI_ID devuelto (ej. 1), distinto del idClinica de login.
+ */
+export async function getClinicaId(): Promise<number> {
+  if (clinicaIdCache != null) return clinicaIdCache;
+  try {
+    const clinicas = await getClinicas();
+    clinicaIdCache = clinicas[0]?.CLI_ID ?? DRICLOUD_CONFIG.clinicaId;
+  } catch {
+    clinicaIdCache = DRICLOUD_CONFIG.clinicaId;
+  }
+  return clinicaIdCache;
+}
+
 export interface DriCloudDespacho {
   DES_ID: number;
   DES_NOMBRE: string;
@@ -98,7 +119,7 @@ export async function getClinicas(): Promise<DriCloudClinica[]> {
 // ─── Despachos ────────────────────────────────────────────────────────────────
 export async function getDespachos(cliId?: number): Promise<DriCloudDespacho[]> {
   return driCloudRequest<DriCloudDespacho[]>('GetDespachos', {
-    CLI_ID: cliId ?? DRICLOUD_CONFIG.clinicaId,
+    CLI_ID: cliId ?? await getClinicaId(),
   });
 }
 
@@ -109,9 +130,11 @@ export async function getSociedades(): Promise<DriCloudSociedad[]> {
 
 // ─── Especialidades ───────────────────────────────────────────────────────────
 export async function getEspecialidades(cliId?: number): Promise<DriCloudEspecialidad[]> {
-  // Intento 1: con CLI_ID
+  // Resolver el CLI_ID real (de GetClinicas) si no se pasa. El idClinica de login
+  // (20627) no es el CLI_ID de datos (1) — pasarlo rompe la consulta.
+  const resolvedCliId = cliId ?? await getClinicaId();
   const body: Record<string, unknown> = {};
-  if (cliId !== undefined) body.CLI_ID = cliId;
+  if (resolvedCliId !== undefined) body.CLI_ID = resolvedCliId;
 
   const data = await driCloudRequest<{ Especialidades?: DriCloudEspecialidad[] } | DriCloudEspecialidad[]>('GetEspecialidades', body);
   if (Array.isArray(data)) return data;
@@ -149,7 +172,7 @@ export async function getAgendaDisponibilidad(params: {
   const body: Record<string, unknown> = {
     fecha: params.fecha,
     diasRecuperar: params.diasRecuperar ?? 7,
-    CLI_ID: params.cliId ?? DRICLOUD_CONFIG.clinicaId,
+    CLI_ID: params.cliId ?? await getClinicaId(),
   };
   if (params.usuId !== undefined) body.USU_ID = params.usuId;
   if (params.listUsuIds) body.List_USU_ID = params.listUsuIds;
@@ -213,7 +236,7 @@ export async function createCita(params: {
     USU_ID: params.usuId,
     fechaInicioCitaString: params.fechaInicioCitaString,
     PAC_ID: params.pacId,
-    CLI_ID: params.cliId ?? DRICLOUD_CONFIG.clinicaId,
+    CLI_ID: params.cliId ?? await getClinicaId(),
   };
   if (params.tciId !== undefined) body.TCI_ID = params.tciId;
   if (params.desId !== undefined) body.DES_ID = params.desId;

@@ -127,7 +127,7 @@ export function registerDriCloudRoutes(app: Express) {
   /** GET /api/dricloud/status — devuelve si estamos en modo demo o real */
   app.get('/api/dricloud/status', async (_req, res) => {
     try {
-      await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      await getEspecialidades();
       console.log('[DriCloud] ✅ Conectado - datos reales disponibles');
       res.json({ isDemoMode: false, message: 'Conectado a DriCloud' });
     } catch (err) {
@@ -146,7 +146,7 @@ export function registerDriCloudRoutes(app: Express) {
     try {
       clearTokenCache();
       const doctores = await getDoctores();
-      const especialidades = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      const especialidades = await getEspecialidades();
       res.json({
         estado: 'OK',
         doctoresObtenidos: doctores.length,
@@ -166,7 +166,7 @@ export function registerDriCloudRoutes(app: Express) {
   app.post('/api/dricloud/refresh', requireAuth, async (_req, res) => {
     clearTokenCache();
     try {
-      await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      await getEspecialidades();
       res.json({ success: true, isDemoMode: false, message: 'Reconectado a DriCloud con éxito' });
     } catch (err) {
       if (isSubscriptionErr(err)) {
@@ -184,7 +184,7 @@ export function registerDriCloudRoutes(app: Express) {
     try {
       // Primero intentamos GetEspecialidades; si devuelve vacío derivamos
       // las especialidades reales desde los doctores (que sí llevan ListadoESPECIALIDAD).
-      let data = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      let data = await getEspecialidades();
 
       if (!data || data.length === 0) {
         // Fallback: derivar especialidades únicas de los ESP_IDs de los doctores
@@ -226,7 +226,7 @@ export function registerDriCloudRoutes(app: Express) {
       const espId = req.query.especialidadId ? parseInt(req.query.especialidadId as string) : undefined;
 
       const [especialidades, doctores] = await Promise.all([
-        getEspecialidades(DRICLOUD_CONFIG.clinicaId),
+        getEspecialidades(),
         getDoctores(espId),
       ]);
 
@@ -285,7 +285,7 @@ export function registerDriCloudRoutes(app: Express) {
       const disp = await getAgendaDisponibilidad({
         usuId: parseInt(doctorId as string),
         fecha: fecha as string,
-        cliId: DRICLOUD_CONFIG.clinicaId,
+  
         diasRecuperar: parseInt(diasRecuperar as string),
       });
       const slots = (disp.Disponibilidad ?? []).map(parseDisponibilidad);
@@ -396,7 +396,7 @@ export function registerDriCloudRoutes(app: Express) {
         pacId,
         tciId: tciId ? parseInt(tciId) : undefined,
         desId: desId ? parseInt(desId) : undefined,
-        cliId: DRICLOUD_CONFIG.clinicaId,
+  
         observaciones: notes,
       });
 

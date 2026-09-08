@@ -76,7 +76,7 @@ export function registerGhlRoutes(app: Express): void {
     }
 
     try {
-      const especialidades = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      const especialidades = await getEspecialidades();
 
       let targetDoctors: DriCloudDoctor[];
       if (id_medico) {
@@ -101,7 +101,7 @@ export function registerGhlRoutes(app: Express): void {
           usuId: doc.USU_ID,
           fecha: fechaDriCloud,
           diasRecuperar,
-          cliId: DRICLOUD_CONFIG.clinicaId,
+    
         });
         for (const raw of disp.Disponibilidad ?? []) {
           allRawSlots.push({ raw, doc });
@@ -190,7 +190,7 @@ export function registerGhlRoutes(app: Express): void {
         pacId: Number(id_dricloud),
         tciId: payload.t || undefined,
         desId: payload.d ?? undefined,
-        cliId: DRICLOUD_CONFIG.clinicaId,
+  
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : '';
@@ -217,7 +217,7 @@ export function registerGhlRoutes(app: Express): void {
         doctorName = `${doctor.USU_NOMBRE} ${doctor.USU_APELLIDOS}`.trim();
       }
 
-      const especialidades = await getEspecialidades(DRICLOUD_CONFIG.clinicaId);
+      const especialidades = await getEspecialidades();
       const espObj = payload.esp ? especialidades.find((e) => e.ESP_ID === payload.esp) : null;
       espNombre = espObj?.ESP_NOMBRE ?? null;
 
