@@ -21,6 +21,7 @@ import request from 'supertest';
 import { createApp } from '../app';
 import * as crmService from '../services/crmService';
 import * as otpService from '../services/otpService';
+import * as twilioService from '../services/twilio';
 import { findOrCreateContact } from './auth.routes';
 
 // ── Item 1: Phone validation — invalid phones rejected before CRM ──────────────
@@ -95,6 +96,7 @@ describe('P2 Item 1 — POST /api/auth/request-otp phone format validation', () 
     vi.spyOn(crmService, 'findContactByPhone').mockResolvedValue('contact-123');
     vi.spyOn(otpService, 'createOtp').mockReturnValue('111111');
     vi.spyOn(crmService, 'setOtpField').mockResolvedValue(undefined);
+    vi.spyOn(twilioService, 'sendOtpSms').mockResolvedValue(undefined);
 
     const res = await request(app)
       .post('/api/auth/request-otp')
@@ -127,6 +129,7 @@ describe('P2 Item 3 — request-otp TOCTOU: concurrent new-phone requests (HTTP 
 
     vi.spyOn(otpService, 'createOtp').mockReturnValue('222222');
     vi.spyOn(crmService, 'setOtpField').mockResolvedValue(undefined);
+    vi.spyOn(twilioService, 'sendOtpSms').mockResolvedValue(undefined);
 
     // Fire two concurrent requests for the same phone without awaiting between them
     const [res1, res2] = await Promise.all([

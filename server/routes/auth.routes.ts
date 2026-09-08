@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import * as crm from '../services/crmService';
 import * as otpService from '../services/otpService';
+import * as twilio from '../services/twilio';
 import { normalizePhone, isValidPhone } from '../lib/phone';
 
 // ─── Tipado de la sesión ──────────────────────────────────────────────────────
@@ -94,9 +95,12 @@ export function registerAuthRoutes(app: Express): void {
       // prevent duplicate CRM contacts under race conditions (TOCTOU fix).
       const contactId = await findOrCreateContact(phone);
 
-      // Generar OTP y dispararlo por WhatsApp vía el campo custom del CRM.
+      // Generar OTP y dispararlo por SMS vía Twilio (ya no depende del
+      // workflow/plantilla de WhatsApp de GHL; el código lo genera la app y se
+      // envía directamente con Twilio). Se mantiene setOtpField para el CRM.
       const otp = otpService.createOtp(phone, contactId);
       await crm.setOtpField(contactId, otp);
+      await twilio.sendOtpSms(phone, otp);
 
       // Nunca se devuelve el OTP al cliente.
       return res.json({ ok: true });
