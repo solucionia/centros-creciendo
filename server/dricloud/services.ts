@@ -1,4 +1,4 @@
-import { driCloudRequest, DRICLOUD_CONFIG } from './auth';
+import { driCloudRequest, DRICLOUD_CONFIG, DriCloudSubscriptionError } from './auth';
 
 // ─── Tipos según documentación DriCloud API v2 ────────────────────────────────
 
@@ -178,7 +178,17 @@ export async function getPacientePorNombreTelefono(
   apellidos: string,
   telefono: string
 ): Promise<{ Exists: boolean; Paciente: DriCloudPaciente }> {
-  return driCloudRequest('GetPacientePorNombreTelefono', { nombre, apellidos, telefono });
+  try {
+    return await driCloudRequest('GetPacientePorNombreTelefono', { nombre, apellidos, telefono });
+  } catch (err) {
+    // DriCloud devuelve Successful:false con "Paciente no existente o varias coincidencias" cuando
+    // no hay coincidencia. Para el flujo verificar-o-crear, "no existe" debe interpretarse como
+    // Exists:false (→ crear paciente), NO como un error 500 que rompe todo el flujo.
+    if (err instanceof DriCloudSubscriptionError && /no existente|no encontrad|no found/i.test(err.message)) {
+      return { Exists: false, Paciente: {} as DriCloudPaciente };
+    }
+    throw err;
+  }
 }
 
 export async function createPaciente(
