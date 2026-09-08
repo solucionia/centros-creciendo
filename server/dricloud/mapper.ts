@@ -52,6 +52,20 @@ export function formatDateForDriCloud(date: Date): string {
 }
 
 /**
+ * Formatea la FECHA DE NACIMIENTO del paciente para DriCloud (yyyy-MM-dd).
+ *
+ * IMPORTANTE: el campo PAC_FECHA_NACIMIENTO de PostCreatePaciente NO acepta el
+ * formato compacto yyyyMMdd (devuelve ErrorCode -2 "An error occurred while
+ * updating the entries"). Requiere el formato ISO con guiones yyyy-MM-dd.
+ */
+export function formatBirthDateForDriCloud(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Formatea una fecha y hora para DriCloud (yyyyMMddHHmm)
  */
 export function formatDateTimeForDriCloud(date: Date): string {

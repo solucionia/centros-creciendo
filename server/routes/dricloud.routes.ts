@@ -19,9 +19,9 @@ import {
 } from '../dricloud/services';
 import {
   mapDriCloudDoctor,
-  formatDateForDriCloud,
   formatDateTimeForDriCloud,
   naiveLocalStringToDateTimeForDriCloud,
+  formatBirthDateForDriCloud,
   parseDisponibilidad,
   splitFullName,
 } from '../dricloud/mapper';
@@ -382,7 +382,7 @@ export function registerDriCloudRoutes(app: Express) {
           PAC_APELLIDOS: apellidos,
           PAC_TELEFONO1: patientPhone,
           PAC_EMAIL: patientEmail ?? '',
-          PAC_FECHA_NACIMIENTO: formatDateForDriCloud(nacimiento),
+          PAC_FECHA_NACIMIENTO: formatBirthDateForDriCloud(nacimiento),
           PAC_SEXO_ID: 0,
         });
         pacId = newPac.PAC_ID;

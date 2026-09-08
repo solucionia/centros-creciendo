@@ -45,7 +45,7 @@ export function buildPacienteCreate(
     PAC_NOMBRE: nombre,
     PAC_APELLIDOS: apellidos,
     PAC_TELEFONO1: normalizePhone(telefono),
-    PAC_FECHA_NACIMIENTO: '19000101', // unknown DOB placeholder
+    PAC_FECHA_NACIMIENTO: '1900-01-01', // unknown DOB placeholder — DriCloud exige formato ISO yyyy-MM-dd (yyyyMMdd da ErrorCode -2)
     PAC_SEXO_ID: 0,
   };
 }
