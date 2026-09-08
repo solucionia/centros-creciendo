@@ -113,7 +113,10 @@ export interface DriCloudCita {
 
 // ─── Clínicas ─────────────────────────────────────────────────────────────────
 export async function getClinicas(): Promise<DriCloudClinica[]> {
-  return driCloudRequest<DriCloudClinica[]>('GetClinicas');
+  // DriCloud envuelve el listado en { Clinicas: [...] } dentro de Data.
+  const data = await driCloudRequest<{ Clinicas?: DriCloudClinica[] } | DriCloudClinica[]>('GetClinicas');
+  if (Array.isArray(data)) return data;
+  return (data as any).Clinicas ?? [];
 }
 
 // ─── Despachos ────────────────────────────────────────────────────────────────
