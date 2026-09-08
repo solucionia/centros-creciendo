@@ -194,7 +194,9 @@ export async function getPacientePorNombreTelefono(
 export async function createPaciente(
   paciente: Omit<DriCloudPaciente, 'PAC_ID'>
 ): Promise<{ PAC_ID: number }> {
-  return driCloudRequest('PostCreatePaciente', { paciente });
+  // Body plano (igual que el resto de endpoints de DriCloud). Envolver en {paciente}
+  // hace que DriCloud no encuentre PAC_NOMBRE y devuelva "Nombre es obligatorio".
+  return driCloudRequest('PostCreatePaciente', paciente);
 }
 
 // ─── Citas ────────────────────────────────────────────────────────────────────
