@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -14,12 +13,18 @@ import { ChevronLeft, ChevronRight, Filter, Loader2, CalendarDays } from "lucide
 import TimeSlot from "./TimeSlot";
 import type { Doctor } from "@shared/schema";
 import centroLogo from "@assets/centrocreciendo_1758144139702.png";
-import { useDriCloudAvailability } from "@/hooks/use-dricloud";
+import { useDriCloudAvailability, useDriCloudSpecialties } from "@/hooks/use-dricloud";
 import {
   availabilityToSlotSet,
   isSlotAvailableFromSet,
   formatDateForAvailabilityQuery,
 } from "@shared/availability";
+
+// El backend GET /api/dricloud/doctors devuelve además el campo `especialidadIds`
+// (los ESP_ID que cada doctor atiende), pero el type `Doctor` de la BD no lo
+// incluye. Definimos un tipo local con esa extensión para poder filtrar por la
+// especialidad real de DriCloud.
+type DoctorWithEspecialidad = Doctor & { especialidadIds?: number[] };
 
 interface AppointmentCalendarProps {
   doctors: Doctor[];
@@ -39,14 +44,28 @@ export default function AppointmentCalendar({
   const [currentWeek, setCurrentWeek] = useState(new Date());
   // La especialidad es un filtro OBLIGATORIO: comienza sin seleccionar y el
   // paciente debe elegir una para ver los médicos y horarios de esa especialidad.
-  const [filterSpecialty, setFilterSpecialty] = useState<string>("");
+  // Guarda el ESP_ID (number) de las especialidades reales de DriCloud.
+  const [filterSpecialty, setFilterSpecialty] = useState<number | "">("");
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
 
+  // Especialidades reales de DriCloud (Odontología, Alergología, Pediatría, ...)
+  const {
+    data: specialties,
+    isLoading: isLoadingSpecialties,
+  } = useDriCloudSpecialties();
+
   // Filtra los doctores por especialidad y doctor. Sin especialidad elegida no
-  // hay médicos que mostrar (filtro obligatorio).
+  // hay médicos que mostrar (filtro obligatorio). Se filtra por `especialidadIds`
+  // (los ESP_ID que atiende el doctor); si la API no trajo el campo, el doctor
+  // no coincide.
   const filteredDoctors = useMemo(() => {
-    if (!filterSpecialty) return [];
-    let filtered = doctors.filter((doctor) => doctor.specialty === filterSpecialty);
+    if (filterSpecialty === "") return [];
+    const allDoctors = doctors as DoctorWithEspecialidad[];
+    let filtered = allDoctors.filter((doctor) =>
+      Array.isArray(doctor.especialidadIds)
+        ? doctor.especialidadIds.includes(filterSpecialty)
+        : false
+    );
     if (filterDoctor !== "all") {
       filtered = filtered.filter((doctor) => doctor.id === filterDoctor);
     }
@@ -58,7 +77,7 @@ export default function AppointmentCalendar({
   // Otherwise default to the first doctor in the filtered list so the
   // calendar is never blank when there is a doctor for that specialty.
   const activeDoctorId = useMemo(() => {
-    if (!filterSpecialty) return null;
+    if (filterSpecialty === "") return null;
     if (filterDoctor !== "all") return filterDoctor;
     return filteredDoctors[0]?.id ?? null;
   }, [filterSpecialty, filterDoctor, filteredDoctors]);
@@ -158,19 +177,23 @@ export default function AppointmentCalendar({
               <label className="text-xs font-medium text-muted-foreground mb-2 block">
                 Especialidad *
               </label>
-              <Tabs value={filterSpecialty} onValueChange={setFilterSpecialty} className="w-full">
-                <TabsList className="grid grid-cols-3 w-full">
-                  <TabsTrigger value="pediatric" className="text-xs" data-testid="filter-pediatric">
-                    Pediatría
-                  </TabsTrigger>
-                  <TabsTrigger value="adult" className="text-xs" data-testid="filter-adult">
-                    Adultos
-                  </TabsTrigger>
-                  <TabsTrigger value="family" className="text-xs" data-testid="filter-family">
-                    Familiar
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
+              <Select
+                value={filterSpecialty === "" ? "" : String(filterSpecialty)}
+                onValueChange={(value) => setFilterSpecialty(value === "" ? "" : Number(value))}
+              >
+                <SelectTrigger data-testid="select-specialty-filter" className="w-full">
+                  <SelectValue
+                    placeholder={isLoadingSpecialties ? "Cargando especialidades..." : "Selecciona la especialidad"}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {(specialties ?? []).map((spec) => (
+                    <SelectItem key={spec.ESP_ID} value={String(spec.ESP_ID)}>
+                      {spec.ESP_NOMBRE}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {filterSpecialty && (

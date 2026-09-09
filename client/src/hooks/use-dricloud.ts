@@ -19,6 +19,31 @@ export function useDriCloudDoctors() {
   });
 }
 
+// Especialidad real de DriCloud devuelta por GET /api/dricloud/specialties
+export interface DriCloudSpecialty {
+  ESP_ID: number;
+  ESP_NOMBRE: string;
+}
+
+// Hook para obtener las especialidades reales de DriCloud - sin caché
+export function useDriCloudSpecialties() {
+  return useQuery({
+    queryKey: ['/api/dricloud/specialties'],
+    queryFn: async () => {
+      const response = await fetch('/api/dricloud/specialties', {
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        throw new Error('Error al cargar las especialidades');
+      }
+      const data = await response.json();
+      return (Array.isArray(data) ? data : []) as DriCloudSpecialty[];
+    },
+    staleTime: 0,
+    gcTime: 0,
+  });
+}
+
 // Hook para obtener estado de conexión DriCloud
 export function useDriCloudStatus() {
   return useQuery({
