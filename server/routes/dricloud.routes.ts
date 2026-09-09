@@ -420,6 +420,14 @@ export function registerDriCloudRoutes(app: Express) {
           message: 'Cita creada en modo demostración',
         });
       } else {
+        const msg = err instanceof Error ? err.message.toLowerCase() : '';
+        if (/ya hay una cita|ocupad|no disponible|not available|periodo de tiempo|conflict/i.test(msg)) {
+          return res.status(409).json({
+            error: 'Ese horario acaba de ocuparse. Por favor, elige otro horario.',
+            codigo_error: 'SLOT_NO_DISPONIBLE',
+            accion_sugerida: 'reconsultar',
+          });
+        }
         console.error('[DriCloud] Error al crear cita:', err);
         res.status(502).json({ error: 'Error al crear la cita en DriCloud' });
       }
