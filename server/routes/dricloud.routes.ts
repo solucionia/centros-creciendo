@@ -359,6 +359,15 @@ export function registerDriCloudRoutes(app: Express) {
     }
 
     const { nombre, apellidos } = splitFullName(patientName);
+
+    // DriCloud requiere PAC_APELLIDOS (obligatorio). Si el paciente solo dio un
+    // nombre (apellidos vacíos), el alta fallaría con "Apellidos es obligatorio"
+    // y se traduciría en un 502 confuso. Mejor pedir nombre completo con 400.
+    if (!apellidos) {
+      return res.status(400).json({
+        error: 'Por favor, introduce el nombre y los apellidos completos del paciente.',
+      });
+    }
     let fechaCita: string;
     try {
       fechaCita = naiveLocalStringToDateTimeForDriCloud(appointmentDate);
