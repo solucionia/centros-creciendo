@@ -21,6 +21,15 @@ interface AppointmentData {
   patientEmail: string;
   patientPhone: string;
   patientAge: number;
+  patientDni?: string;
+  patientBirthDate?: string;
+  appointmentFor?: string;
+  tutorName?: string;
+  tutorPhone?: string;
+  tutorDni?: string;
+  privacyAccepted?: boolean;
+  wantsAdvance?: boolean;
+  advancePreference?: string;
   notes?: string;
 }
 
@@ -30,6 +39,8 @@ interface AppointmentConfirmationProps {
   appointmentDate: Date;
   patientData: AppointmentData;
   appointmentId?: string;
+  /** Precio de la consulta (si está disponible en la fuente de datos). */
+  price?: string;
   onNewAppointment?: () => void;
   onDownloadConfirmation?: () => void;
   onShareConfirmation?: () => void;
@@ -41,6 +52,7 @@ export default function AppointmentConfirmation({
   appointmentDate,
   patientData,
   appointmentId = "CC-2024-001",
+  price,
   onNewAppointment,
   onDownloadConfirmation,
   onShareConfirmation
@@ -86,6 +98,30 @@ export default function AppointmentConfirmation({
       month: '2-digit',
       year: 'numeric'
     });
+  };
+
+  const getAppointmentForLabel = (value?: string) => {
+    switch (value) {
+      case 'my-child':
+        return 'Mi hijo/a';
+      case 'grandparent':
+        return 'Mi abuelo/a';
+      case 'other':
+        return 'Otra persona';
+      default:
+        return 'Para mí';
+    }
+  };
+
+  const getAdvancePreferenceLabel = (value?: string) => {
+    switch (value) {
+      case 'morning':
+        return 'Por la mañana';
+      case 'afternoon':
+        return 'Por la tarde';
+      default:
+        return 'Mañana o tarde';
+    }
   };
 
   return (
@@ -170,28 +206,95 @@ export default function AppointmentConfirmation({
                 {patientData.patientName}
               </p>
             </div>
-            
+
             <div>
               <p className="text-muted-foreground">Edad</p>
               <p className="font-medium" data-testid="text-patient-age">
                 {patientData.patientAge} años
               </p>
             </div>
-            
+
             <div>
               <p className="text-muted-foreground">Email</p>
               <p className="font-medium text-primary" data-testid="text-patient-email">
                 {patientData.patientEmail}
               </p>
             </div>
-            
+
             <div>
               <p className="text-muted-foreground">Teléfono</p>
               <p className="font-medium" data-testid="text-patient-phone">
                 {patientData.patientPhone}
               </p>
             </div>
+
+            {patientData.patientBirthDate && (
+              <div>
+                <p className="text-muted-foreground">Fecha de nacimiento</p>
+                <p className="font-medium">{patientData.patientBirthDate}</p>
+              </div>
+            )}
+
+            {patientData.patientDni && (
+              <div>
+                <p className="text-muted-foreground">DNI / NIE</p>
+                <p className="font-medium">{patientData.patientDni}</p>
+              </div>
+            )}
+
+            <div>
+              <p className="text-muted-foreground">La cita es para</p>
+              <p className="font-medium" data-testid="text-appointment-for">
+                {getAppointmentForLabel(patientData.appointmentFor)}
+              </p>
+            </div>
           </div>
+
+          {/* Datos del tutor / acompañante */}
+          {patientData.appointmentFor && patientData.appointmentFor !== "me" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              {patientData.tutorName && (
+                <div>
+                  <p className="text-muted-foreground">Tutor / acompañante</p>
+                  <p className="font-medium">{patientData.tutorName}</p>
+                </div>
+              )}
+              {patientData.tutorPhone && (
+                <div>
+                  <p className="text-muted-foreground">Teléfono del tutor</p>
+                  <p className="font-medium">{patientData.tutorPhone}</p>
+                </div>
+              )}
+              {patientData.tutorDni && (
+                <div>
+                  <p className="text-muted-foreground">DNI del tutor</p>
+                  <p className="font-medium">{patientData.tutorDni}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Lista de espera */}
+          {patientData.wantsAdvance && (
+            <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg text-sm">
+              <p className="font-medium text-green-900 dark:text-green-100">
+                📅 Indicó que desea adelantar la cita si hay hueco antes
+              </p>
+              <p className="text-green-800 dark:text-green-200">
+                Preferencia: {getAdvancePreferenceLabel(patientData.advancePreference)}
+              </p>
+            </div>
+          )}
+
+          {/* Precio de la consulta (si está disponible) */}
+          {price && (
+            <div className="flex items-center justify-between p-3 border rounded-lg text-sm">
+              <span className="text-muted-foreground">Precio de la consulta</span>
+              <span className="font-semibold" data-testid="text-appointment-price">
+                {price}
+              </span>
+            </div>
+          )}
 
           {patientData.notes && (
             <div>

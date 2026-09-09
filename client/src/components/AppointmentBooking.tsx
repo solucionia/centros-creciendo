@@ -25,6 +25,15 @@ interface PatientData {
   patientEmail: string;
   patientPhone: string;
   patientAge: number;
+  patientDni?: string;
+  patientBirthDate?: string;
+  appointmentFor?: string;
+  tutorName?: string;
+  tutorPhone?: string;
+  tutorDni?: string;
+  privacyAccepted?: boolean;
+  wantsAdvance?: boolean;
+  advancePreference?: string;
   notes?: string;
 }
 
@@ -83,8 +92,28 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
         patientAge: data.patientAge,
         appointmentDate: naiveLocalDateTime,
         notes: data.notes,
+        patientDni: data.patientDni,
+        patientBirthDate: data.patientBirthDate,
+        appointmentFor: data.appointmentFor,
+        tutorName: data.tutorName,
+        tutorPhone: data.tutorPhone,
+        tutorDni: data.tutorDni,
+        privacyAccepted: data.privacyAccepted,
+        wantsAdvance: data.wantsAdvance,
+        advancePreference: data.advancePreference,
       });
       setPatientData(data);
+      // Guardamos el interés en adelantar la cita para persistirlo entre sesiones.
+      if (data.wantsAdvance) {
+        try {
+          localStorage.setItem('citafacil_waitlist', JSON.stringify({
+            advancePreference: data.advancePreference || 'any',
+            requestDate: new Date().toISOString(),
+          }));
+        } catch {
+          // localStorage puede no estar disponible; el dato ya viaja al backend.
+        }
+      }
       setCurrentStep('confirmation');
     } catch (error) {
       console.error('Error creating appointment:', error);

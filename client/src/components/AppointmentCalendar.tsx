@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Filter, Loader2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Filter, Loader2, CalendarDays } from "lucide-react";
 import TimeSlot from "./TimeSlot";
 import type { Doctor } from "@shared/schema";
 import centroLogo from "@assets/centrocreciendo_1758144139702.png";
@@ -37,20 +37,31 @@ export default function AppointmentCalendar({
   selectedSlot
 }: AppointmentCalendarProps) {
   const [currentWeek, setCurrentWeek] = useState(new Date());
-  const [filterSpecialty, setFilterSpecialty] = useState<string>("all");
+  // La especialidad es un filtro OBLIGATORIO: comienza sin seleccionar y el
+  // paciente debe elegir una para ver los médicos y horarios de esa especialidad.
+  const [filterSpecialty, setFilterSpecialty] = useState<string>("");
   const [filterDoctor, setFilterDoctor] = useState<string>("all");
+
+  // Filtra los doctores por especialidad y doctor. Sin especialidad elegida no
+  // hay médicos que mostrar (filtro obligatorio).
+  const filteredDoctors = useMemo(() => {
+    if (!filterSpecialty) return [];
+    let filtered = doctors.filter((doctor) => doctor.specialty === filterSpecialty);
+    if (filterDoctor !== "all") {
+      filtered = filtered.filter((doctor) => doctor.id === filterDoctor);
+    }
+    return filtered;
+  }, [doctors, filterSpecialty, filterDoctor]);
 
   // Derive the active doctor id for the availability query.
   // When the user has selected a specific doctor, use that id.
-  // When "all" is selected, default to the first doctor in the filtered list
-  // so the calendar is never blank when there is only one real doctor.
+  // Otherwise default to the first doctor in the filtered list so the
+  // calendar is never blank when there is a doctor for that specialty.
   const activeDoctorId = useMemo(() => {
+    if (!filterSpecialty) return null;
     if (filterDoctor !== "all") return filterDoctor;
-    const first = doctors.find(
-      (d) => filterSpecialty === "all" || d.specialty === filterSpecialty
-    );
-    return first?.id ?? null;
-  }, [filterDoctor, filterSpecialty, doctors]);
+    return filteredDoctors[0]?.id ?? null;
+  }, [filterSpecialty, filterDoctor, filteredDoctors]);
 
   // Fetch real availability from DriCloud for the selected doctor + week start.
   // We query starting from the Monday of the current week (diasRecuperar=7)
@@ -94,22 +105,6 @@ export default function AppointmentCalendar({
   }, [currentWeek]);
 
   // Filter doctors by specialty and doctor
-  const filteredDoctors = useMemo(() => {
-    let filtered = doctors;
-    
-    if (filterSpecialty !== "all") {
-      filtered = filtered.filter(doctor => doctor.specialty === filterSpecialty);
-    }
-    
-    if (filterDoctor !== "all") {
-      filtered = filtered.filter(doctor => doctor.id === filterDoctor);
-    }
-    
-    return filtered;
-  }, [doctors, filterSpecialty, filterDoctor]);
-
-  // Derive the set of available time strings from the DriCloud response.
-  // isSlotAvailableFromSet handles weekend + null (loading) guards.
   const checkSlotAvailable = (_doctor: Doctor, time: string, date: Date): boolean => {
     return isSlotAvailableFromSet(availableSlotSet, time, date);
   };
@@ -161,13 +156,10 @@ export default function AppointmentCalendar({
           <div className="flex flex-col sm:flex-row gap-4 lg:max-w-2xl">
             <div className="flex-1">
               <label className="text-xs font-medium text-muted-foreground mb-2 block">
-                Especialidad
+                Especialidad *
               </label>
               <Tabs value={filterSpecialty} onValueChange={setFilterSpecialty} className="w-full">
-                <TabsList className="grid grid-cols-4 w-full">
-                  <TabsTrigger value="all" className="text-xs" data-testid="filter-all">
-                    Todas
-                  </TabsTrigger>
+                <TabsList className="grid grid-cols-3 w-full">
                   <TabsTrigger value="pediatric" className="text-xs" data-testid="filter-pediatric">
                     Pediatría
                   </TabsTrigger>
@@ -180,144 +172,167 @@ export default function AppointmentCalendar({
                 </TabsList>
               </Tabs>
             </div>
-            
-            <div className="sm:w-64">
-              <label className="text-xs font-medium text-muted-foreground mb-2 block">
-                Médico
-              </label>
-              <Select value={filterDoctor} onValueChange={setFilterDoctor}>
-                <SelectTrigger data-testid="select-doctor-filter">
-                  <SelectValue placeholder="Todos los médicos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los médicos</SelectItem>
-                  {doctors.map((doctor) => (
-                    <SelectItem key={doctor.id} value={doctor.id}>
-                      Dr. {doctor.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </div>
 
-        {/* Week Navigation */}
-        <div className="flex items-center justify-between pt-4">
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={() => navigateWeek('prev')}
-            data-testid="button-prev-week"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          
-          <div className="text-lg font-semibold">
-            {currentWeek.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+            {filterSpecialty && (
+              <div className="sm:w-64">
+                <label className="text-xs font-medium text-muted-foreground mb-2 block">
+                  Médico
+                </label>
+                <Select value={filterDoctor} onValueChange={setFilterDoctor}>
+                  <SelectTrigger data-testid="select-doctor-filter">
+                    <SelectValue placeholder="Todos los médicos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los médicos</SelectItem>
+                    {filteredDoctors.map((doctor) => (
+                      <SelectItem key={doctor.id} value={doctor.id}>
+                        Dr. {doctor.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
-          
-          <Button 
-            variant="outline" 
-            size="icon"
-            onClick={() => navigateWeek('next')}
-            data-testid="button-next-week"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
         </div>
       </CardHeader>
 
       <CardContent className="p-6">
-        {/* Week Days Header */}
-        <div className="grid grid-cols-7 gap-2 mb-4">
-          {weekDays.map((date, index) => (
-            <Button
-              key={index}
-              variant={isSelectedDate(date) ? "default" : "ghost"}
-              className={`h-auto p-3 flex flex-col items-center ${
-                isToday(date) ? 'ring-2 ring-primary/50' : ''
-              }`}
-              onClick={() => onDateSelect?.(date)}
-              data-testid={`button-date-${date.getDate()}`}
-            >
-              <span className="text-xs font-medium">
-                {formatDate(date).split(' ')[0]}
-              </span>
-              <span className="text-lg font-bold">
-                {date.getDate()}
-              </span>
-              {isToday(date) && (
-                <Badge variant="secondary" className="text-xs mt-1">
-                  Hoy
-                </Badge>
-              )}
-            </Button>
-          ))}
-        </div>
-
-        {/* Available Slots for Selected Date */}
-        <div className="space-y-4">
-          <div className="flex items-center space-x-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">
-              Citas disponibles para {formatDate(selectedDate)}
-            </span>
-            {isAvailabilityLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-            ) : (
-              <Badge variant="outline" className="text-xs">
-                {timeSlots.length} hueco{timeSlots.length !== 1 ? 's' : ''}
-              </Badge>
-            )}
+        {!filterSpecialty && (
+          <div className="min-h-[400px] flex flex-col items-center justify-center text-center space-y-3">
+            <CalendarDays className="h-10 w-10 text-muted-foreground" />
+            <p className="text-lg font-medium">Elige una especialidad para continuar</p>
+            <p className="text-sm text-muted-foreground max-w-md">
+              Selecciona arriba la especialidad que necesitas y te mostraremos los
+              médicos y horarios disponibles para esa consulta.
+            </p>
           </div>
+        )}
 
-          <div className="grid gap-2 max-h-96 overflow-y-auto">
-            {isAvailabilityLoading && (
-              <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                Cargando disponibilidad...
+        {filterSpecialty && (
+          <>
+            {filteredDoctors.length === 0 && (
+              <div className="text-center py-10 text-muted-foreground">
+                No hay médicos disponibles para esta especialidad. Prueba a elegir otra.
               </div>
             )}
 
-            {!isAvailabilityLoading && timeSlots.length === 0 && (
-              <div className="text-sm text-muted-foreground italic py-4 text-center">
-                No hay huecos disponibles para este día.
+            {/* Week Navigation */}
+            <div className="flex items-center justify-between pb-4">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => navigateWeek('prev')}
+                data-testid="button-prev-week"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+
+              <div className="text-lg font-semibold">
+                {currentWeek.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
               </div>
-            )}
 
-            {!isAvailabilityLoading && timeSlots.map((time) => {
-              // All times in the set are confirmed available from DriCloud;
-              // use checkSlotAvailable to guard weekends (already handled by the
-              // set derivation, but kept as a safety net).
-              const availableDoctors = filteredDoctors.filter((doctor) =>
-                checkSlotAvailable(doctor, time, selectedDate)
-              );
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => navigateWeek('next')}
+                data-testid="button-next-week"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
 
-              if (availableDoctors.length === 0) return null;
+            {/* Week Days Header */}
+            <div className="grid grid-cols-7 gap-2 mb-4">
+              {weekDays.map((date, index) => (
+                <Button
+                  key={index}
+                  variant={isSelectedDate(date) ? "default" : "ghost"}
+                  className={`h-auto p-3 flex flex-col items-center ${
+                    isToday(date) ? 'ring-2 ring-primary/50' : ''
+                  }`}
+                  onClick={() => onDateSelect?.(date)}
+                  data-testid={`button-date-${date.getDate()}`}
+                >
+                  <span className="text-xs font-medium">
+                    {formatDate(date).split(' ')[0]}
+                  </span>
+                  <span className="text-lg font-bold">
+                    {date.getDate()}
+                  </span>
+                  {isToday(date) && (
+                    <Badge variant="secondary" className="text-xs mt-1">
+                      Hoy
+                    </Badge>
+                  )}
+                </Button>
+              ))}
+            </div>
 
-              return (
-                <div key={time} className="space-y-1">
-                  {availableDoctors.map((doctor) => (
-                    <TimeSlot
-                      key={`${doctor.id}-${time}`}
-                      time={time}
-                      date={selectedDate}
-                      doctor={doctor}
-                      isAvailable={true}
-                      isSelected={
-                        selectedSlot?.doctorId === doctor.id &&
-                        selectedSlot?.time === time &&
-                        selectedSlot?.date.toDateString() === selectedDate.toDateString()
-                      }
-                      onSelect={() => onSlotSelect?.(doctor, time, selectedDate)}
-                    />
-                  ))}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+            {/* Available Slots for Selected Date */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">
+                  Citas disponibles para {formatDate(selectedDate)}
+                </span>
+                {isAvailabilityLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <Badge variant="outline" className="text-xs">
+                    {timeSlots.length} hueco{timeSlots.length !== 1 ? 's' : ''}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="grid gap-2 max-h-96 overflow-y-auto">
+                {isAvailabilityLoading && (
+                  <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    Cargando disponibilidad...
+                  </div>
+                )}
+
+                {!isAvailabilityLoading && timeSlots.length === 0 && (
+                  <div className="text-sm text-muted-foreground italic py-4 text-center">
+                    No hay huecos disponibles para este día.
+                  </div>
+                )}
+
+                {!isAvailabilityLoading && timeSlots.map((time) => {
+                  // All times in the set are confirmed available from DriCloud;
+                  // use checkSlotAvailable to guard weekends (already handled by the
+                  // set derivation, but kept as a safety net).
+                  const availableDoctors = filteredDoctors.filter((doctor) =>
+                    checkSlotAvailable(doctor, time, selectedDate)
+                  );
+
+                  if (availableDoctors.length === 0) return null;
+
+                  return (
+                    <div key={time} className="space-y-1">
+                      {availableDoctors.map((doctor) => (
+                        <TimeSlot
+                          key={`${doctor.id}-${time}`}
+                          time={time}
+                          date={selectedDate}
+                          doctor={doctor}
+                          isAvailable={true}
+                          isSelected={
+                            selectedSlot?.doctorId === doctor.id &&
+                            selectedSlot?.time === time &&
+                            selectedSlot?.date.toDateString() === selectedDate.toDateString()
+                          }
+                          onSelect={() => onSlotSelect?.(doctor, time, selectedDate)}
+                        />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );

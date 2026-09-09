@@ -342,6 +342,11 @@ export function registerDriCloudRoutes(app: Express) {
       notes,
       tciId,
       desId,
+      patientDni,
+      patientBirthDate,
+      privacyAccepted,
+      tutorName,
+      tutorDni,
     } = req.body;
 
     if (!doctorId || !patientName || !patientPhone || !appointmentDate) {
@@ -384,8 +389,25 @@ export function registerDriCloudRoutes(app: Express) {
         pacId = pacResult.Paciente.PAC_ID;
         console.log('[DriCloud] Paciente existente:', pacId);
       } else {
-        const nacimiento = new Date();
-        nacimiento.setFullYear(nacimiento.getFullYear() - (patientAge ?? 30));
+        // Fecha de nacimiento: preferir la real del paciente; si no se aporta,
+        // aproximarla a partir de la edad (DriCloud exige PAC_FECHA_NACIMIENTO).
+        let nacimiento: Date;
+        if (patientBirthDate) {
+          nacimiento = new Date(patientBirthDate);
+          if (isNaN(nacimiento.getTime())) {
+            return res.status(400).json({ error: 'Fecha de nacimiento inválida.' });
+          }
+        } else {
+          nacimiento = new Date();
+          nacimiento.setFullYear(nacimiento.getFullYear() - (patientAge ?? 30));
+        }
+
+        // Si la cita es para un tercero (hijo/a, abuelo/a...), quien gestiona la
+        // reserva actúa como tutor/a. Incluimos sus datos si se declaran.
+        const { nombre: tutorNombre, apellidos: tutorApellidos } = tutorName
+          ? splitFullName(tutorName)
+          : { nombre: '', apellidos: '' };
+
         const newPac = await createPaciente({
           PAC_NOMBRE: nombre,
           PAC_APELLIDOS: apellidos,
@@ -393,6 +415,15 @@ export function registerDriCloudRoutes(app: Express) {
           PAC_EMAIL: patientEmail ?? '',
           PAC_FECHA_NACIMIENTO: formatBirthDateForDriCloud(nacimiento),
           PAC_SEXO_ID: 0,
+          PAC_NIF: patientDni || undefined,
+          PAC_TRAT_DATOS: !!privacyAccepted,
+          ...(tutorNombre
+            ? {
+                PAC_FAC_TUTOR_NOMBRE: tutorNombre,
+                PAC_FAC_TUTOR_APELLIDOS: tutorApellidos,
+                PAC_FAC_TUTOR_NIF: tutorDni || undefined,
+              }
+            : {}),
         });
         pacId = newPac.PAC_ID;
         console.log('[DriCloud] Paciente creado:', pacId);

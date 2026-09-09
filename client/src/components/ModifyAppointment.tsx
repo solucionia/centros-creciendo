@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Calendar, User, Clock } from "lucide-react";
+import { Search, Calendar, User, Clock, MessageCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isWithin48Hours, buildHelpWhatsAppUrl } from "@/lib/appointment-window";
 import type { AppointmentWithDoctor } from "@shared/schema";
 
 interface ModifyAppointmentProps {
@@ -145,59 +146,84 @@ export default function ModifyAppointment({ onBack }: ModifyAppointmentProps) {
         {!isLoading && filteredAppointments.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Citas encontradas:</h3>
-            {filteredAppointments.map((appointment) => (
-              <Card key={appointment.id} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">Dr. {appointment.doctor.name}</span>
+            {filteredAppointments.map((appointment) => {
+              const tooLate = isWithin48Hours(appointment.appointmentDate);
+              return (
+                <Card key={appointment.id} className="p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">Dr. {appointment.doctor.name}</span>
+                        </div>
+                        <Badge>{getSpecialtyLabel(appointment.doctor.specialty)}</Badge>
                       </div>
-                      <Badge>{getSpecialtyLabel(appointment.doctor.specialty)}</Badge>
-                    </div>
-                    
-                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                      <div className="flex items-center space-x-1">
-                        <Calendar className="h-4 w-4" />
-                        <span>{formatDate(appointment.appointmentDate.toString())}</span>
+
+                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                        <div className="flex items-center space-x-1">
+                          <Calendar className="h-4 w-4" />
+                          <span>{formatDate(appointment.appointmentDate.toString())}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Clock className="h-4 w-4" />
+                          <span>{formatTime(appointment.appointmentDate.toString())}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <Clock className="h-4 w-4" />
-                        <span>{formatTime(appointment.appointmentDate.toString())}</span>
+
+                      <div className="text-sm">
+                        <p><strong>Paciente:</strong> {appointment.patientName}</p>
+                        <p><strong>Email:</strong> {appointment.patientEmail}</p>
+                        <p><strong>Teléfono:</strong> {appointment.patientPhone}</p>
+                        {appointment.notes && <p><strong>Notas:</strong> {appointment.notes}</p>}
                       </div>
                     </div>
-                    
-                    <div className="text-sm">
-                      <p><strong>Paciente:</strong> {appointment.patientName}</p>
-                      <p><strong>Email:</strong> {appointment.patientEmail}</p>
-                      <p><strong>Teléfono:</strong> {appointment.patientPhone}</p>
-                      {appointment.notes && <p><strong>Notas:</strong> {appointment.notes}</p>}
-                    </div>
+
+                    {tooLate ? (
+                      <div className="flex flex-col gap-2 max-w-xs">
+                        <div className="flex items-start space-x-2 text-sm text-destructive">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>
+                            Tu cita es en menos de 48 horas. Ya no puedes modificarla
+                            en línea: contacta con recepción.
+                          </span>
+                        </div>
+                        <Button asChild variant="outline" size="sm" className="w-full">
+                          <a
+                            href={buildHelpWhatsAppUrl(appointment.patientName, appointment.appointmentDate.toString())}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <MessageCircle className="h-4 w-4 mr-2" />
+                            Ayuda con mi cita
+                          </a>
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedAppointment(appointment)}
+                          data-testid={`button-modify-${appointment.id}`}
+                        >
+                          Modificar mi cita
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => cancelMutation.mutate(appointment.id)}
+                          disabled={cancelMutation.isPending}
+                          data-testid={`button-cancel-${appointment.id}`}
+                        >
+                          {cancelMutation.isPending ? "Cancelando..." : "Cancelar"}
+                        </Button>
+                      </div>
+                    )}
                   </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedAppointment(appointment)}
-                      data-testid={`button-modify-${appointment.id}`}
-                    >
-                      Modificar
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => cancelMutation.mutate(appointment.id)}
-                      disabled={cancelMutation.isPending}
-                      data-testid={`button-cancel-${appointment.id}`}
-                    >
-                      {cancelMutation.isPending ? "Cancelando..." : "Cancelar"}
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
 

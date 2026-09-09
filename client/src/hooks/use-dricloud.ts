@@ -108,6 +108,15 @@ export function useCreateDriCloudAppointment() {
       appointmentDate: string;
       specialtyName?: string;
       notes?: string;
+      patientDni?: string;
+      patientBirthDate?: string;
+      appointmentFor?: string;
+      tutorName?: string;
+      tutorPhone?: string;
+      tutorDni?: string;
+      privacyAccepted?: boolean;
+      wantsAdvance?: boolean;
+      advancePreference?: string;
     }) => {
       const response = await fetch('/api/dricloud/appointments', {
         method: 'POST',

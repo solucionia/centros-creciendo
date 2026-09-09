@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Search, Calendar, User, Clock, Trash2 } from "lucide-react";
+import { Search, Calendar, User, Clock, Trash2, MessageCircle, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { isWithin48Hours, buildHelpWhatsAppUrl } from "@/lib/appointment-window";
 import type { AppointmentWithDoctor } from "@shared/schema";
 
 interface CancelAppointmentProps {
@@ -144,74 +145,99 @@ export default function CancelAppointment({ onBack }: CancelAppointmentProps) {
         {!isLoading && filteredAppointments.length > 0 && (
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Citas encontradas:</h3>
-            {filteredAppointments.map((appointment) => (
-              <Card key={appointment.id} className="p-4 border-l-4 border-l-destructive/50">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex items-center space-x-2">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">Dr. {appointment.doctor.name}</span>
+            {filteredAppointments.map((appointment) => {
+              const tooLate = isWithin48Hours(appointment.appointmentDate);
+              return (
+                <Card key={appointment.id} className="p-4 border-l-4 border-l-destructive/50">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">Dr. {appointment.doctor.name}</span>
+                        </div>
+                        <Badge>{getSpecialtyLabel(appointment.doctor.specialty)}</Badge>
                       </div>
-                      <Badge>{getSpecialtyLabel(appointment.doctor.specialty)}</Badge>
-                    </div>
-                    
-                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                      <div className="flex items-center space-x-1">
-                        <Calendar className="h-4 w-4" />
-                        <span>{formatDate(appointment.appointmentDate.toString())}</span>
+
+                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                        <div className="flex items-center space-x-1">
+                          <Calendar className="h-4 w-4" />
+                          <span>{formatDate(appointment.appointmentDate.toString())}</span>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Clock className="h-4 w-4" />
+                          <span>{formatTime(appointment.appointmentDate.toString())}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <Clock className="h-4 w-4" />
-                        <span>{formatTime(appointment.appointmentDate.toString())}</span>
+
+                      <div className="text-sm">
+                        <p><strong>Paciente:</strong> {appointment.patientName}</p>
+                        <p><strong>Email:</strong> {appointment.patientEmail}</p>
+                        <p><strong>Teléfono:</strong> {appointment.patientPhone}</p>
+                        {appointment.notes && <p><strong>Notas:</strong> {appointment.notes}</p>}
                       </div>
                     </div>
-                    
-                    <div className="text-sm">
-                      <p><strong>Paciente:</strong> {appointment.patientName}</p>
-                      <p><strong>Email:</strong> {appointment.patientEmail}</p>
-                      <p><strong>Teléfono:</strong> {appointment.patientPhone}</p>
-                      {appointment.notes && <p><strong>Notas:</strong> {appointment.notes}</p>}
-                    </div>
-                  </div>
-                  
-                  <div className="flex flex-col gap-2">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={cancelMutation.isPending}
-                          data-testid={`button-cancel-confirm-${appointment.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Cancelar Cita
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta acción cancelará permanentemente la cita del {formatDate(appointment.appointmentDate.toString())} 
-                            a las {formatTime(appointment.appointmentDate.toString())} con Dr. {appointment.doctor.name}.
-                            Esta acción no se puede deshacer.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>No, mantener cita</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => cancelMutation.mutate(appointment.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+
+                    {tooLate ? (
+                      <div className="flex flex-col gap-2 max-w-xs">
+                        <div className="flex items-start space-x-2 text-sm text-destructive">
+                          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                          <span>
+                            Tu cita es en menos de 48 horas. Ya no puedes cancelarla
+                            en línea: contacta con recepción.
+                          </span>
+                        </div>
+                        <Button asChild variant="outline" size="sm" className="w-full">
+                          <a
+                            href={buildHelpWhatsAppUrl(appointment.patientName, appointment.appointmentDate.toString())}
+                            target="_blank"
+                            rel="noreferrer"
                           >
-                            Sí, cancelar cita
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                            <MessageCircle className="h-4 w-4 mr-2" />
+                            Ayuda con mi cita
+                          </a>
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={cancelMutation.isPending}
+                              data-testid={`button-cancel-confirm-${appointment.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Cancelar Cita
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>¿Estás seguro?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta acción cancelará permanentemente la cita del {formatDate(appointment.appointmentDate.toString())}
+                                a las {formatTime(appointment.appointmentDate.toString())} con Dr. {appointment.doctor.name}.
+                                Esta acción no se puede deshacer.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>No, mantener cita</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => cancelMutation.mutate(appointment.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Sí, cancelar cita
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
         )}
 
