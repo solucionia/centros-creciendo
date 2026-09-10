@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Calendar, User, Clock, MessageCircle, AlertTriangle } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
 import { isWithin48Hours, buildHelpWhatsAppUrl } from "@/lib/appointment-window";
 import type { AppointmentWithDoctor } from "@shared/schema";
 
@@ -16,10 +15,8 @@ interface ModifyAppointmentProps {
 export default function ModifyAppointment({ onBack }: ModifyAppointmentProps) {
   const [searchEmail, setSearchEmail] = useState("");
   const [selectedAppointment, setSelectedAppointment] = useState<AppointmentWithDoctor | undefined>();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
 
-  const { data: appointments, isLoading, refetch } = useQuery({
+  const { data: appointments, isLoading } = useQuery({
     queryKey: ['/api/appointments'],
     queryFn: async (): Promise<AppointmentWithDoctor[]> => {
       const response = await fetch('/api/appointments');
@@ -27,34 +24,6 @@ export default function ModifyAppointment({ onBack }: ModifyAppointmentProps) {
         throw new Error('Error al cargar las citas');
       }
       return response.json();
-    },
-  });
-
-  const cancelMutation = useMutation({
-    mutationFn: async (appointmentId: string) => {
-      const response = await fetch(`/api/appointments/${appointmentId}/cancel`, {
-        method: 'POST',
-      });
-      if (!response.ok) {
-        throw new Error('Error al cancelar la cita');
-      }
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/appointments'] });
-      toast({
-        title: "Cita cancelada",
-        description: "La cita ha sido cancelada exitosamente.",
-      });
-      setSelectedAppointment(undefined);
-      refetch();
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
     },
   });
 
@@ -209,15 +178,6 @@ export default function ModifyAppointment({ onBack }: ModifyAppointmentProps) {
                         >
                           Modificar mi cita
                         </Button>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          onClick={() => cancelMutation.mutate(appointment.id)}
-                          disabled={cancelMutation.isPending}
-                          data-testid={`button-cancel-${appointment.id}`}
-                        >
-                          {cancelMutation.isPending ? "Cancelando..." : "Cancelar"}
-                        </Button>
                       </div>
                     )}
                   </div>
@@ -232,8 +192,8 @@ export default function ModifyAppointment({ onBack }: ModifyAppointmentProps) {
           <Card className="p-4 bg-muted/50">
             <h3 className="text-lg font-semibold mb-4">Modificar Cita</h3>
             <p className="text-muted-foreground">
-              Funcionalidad de modificación disponible próximamente. 
-              Por ahora puedes cancelar la cita y crear una nueva.
+              Funcionalidad de modificación disponible próximamente.
+              Para cambiar tu cita, contacta con la clínica.
             </p>
             <Button
               variant="outline"

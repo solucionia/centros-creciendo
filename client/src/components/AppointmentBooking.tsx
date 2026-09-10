@@ -8,7 +8,6 @@ import AppointmentCalendar from "./AppointmentCalendar";
 import PatientForm from "./PatientForm";
 import AppointmentConfirmation from "./AppointmentConfirmation";
 import ModifyAppointment from "./ModifyAppointment";
-import CancelAppointment from "./CancelAppointment";
 import { DemoModeBanner } from "./DemoModeBanner";
 import { useCreateDriCloudAppointment } from "@/hooks/use-dricloud";
 import { useAuthStatus } from "@/hooks/use-auth";
@@ -42,7 +41,7 @@ interface AppointmentBookingProps {
 }
 
 export default function AppointmentBooking({ doctors }: AppointmentBookingProps) {
-  const [currentView, setCurrentView] = useState<'booking' | 'modify' | 'cancel'>('booking');
+  const [currentView, setCurrentView] = useState<'booking' | 'modify'>('booking');
   const [currentStep, setCurrentStep] = useState<'calendar' | 'form' | 'confirmation'>('calendar');
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | undefined>();
@@ -205,14 +204,6 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
       );
     }
     
-    if (currentView === 'cancel') {
-      return (
-        <CancelAppointment
-          onBack={() => setCurrentView('booking')}
-        />
-      );
-    }
-    
     // Vista de reserva (booking)
     return (
       <>
@@ -301,13 +292,6 @@ export default function AppointmentBooking({ doctors }: AppointmentBookingProps)
                 data-testid="button-modifica-cita"
               >
                 Modifica Cita
-              </Button>
-              <Button
-                variant={currentView === 'cancel' ? 'default' : 'outline'}
-                onClick={() => setCurrentView('cancel')}
-                data-testid="button-cancela-cita"
-              >
-                Cancela Cita
               </Button>
             </div>
           </div>

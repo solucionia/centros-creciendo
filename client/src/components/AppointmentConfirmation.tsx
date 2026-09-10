@@ -317,7 +317,7 @@ export default function AppointmentConfirmation({
             <li>• Llega 15 minutos antes de tu cita</li>
             <li>• Trae tu documento de identidad</li>
             <li>• Si tienes exámenes previos, llévalos contigo</li>
-            <li>• En caso de cancelar, hazlo con 24 horas de anticipación</li>
+            <li>• Para cancelar o cambiar tu cita, contacta con la clínica</li>
           </ul>
         </div>
 
