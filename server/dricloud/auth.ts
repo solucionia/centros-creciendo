@@ -126,8 +126,10 @@ async function doLogin(): Promise<string> {
   }
 
   const token = body.Data.USU_APITOKEN;
-  tokenCache = { token, expiresAt: Date.now() + 23 * 60 * 60 * 1000 };
-  console.log('[DriCloud] ✅ Login exitoso, token cacheado');
+  // El token de DriCloud caduca bastante antes que un día: NO cachear 23h.
+  // Se cachea 60 min y además se reintenta con login nuevo si DriCloud lo rechaza.
+  tokenCache = { token, expiresAt: Date.now() + 60 * 60 * 1000 };
+  console.log('[DriCloud] ✅ Login exitoso, token cacheado (60 min)');
   return token;
 }
 
@@ -146,10 +148,25 @@ export async function getDriCloudToken(): Promise<string> {
   return loginInProgress;
 }
 
+// ─── Detección de errores de token/sesión (no de negocio) ────────────────────
+function isAuthErr(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return m.includes('token') || m.includes('sesi') || m.includes('expirad') ||
+         m.includes('unauthori') || m.includes('forbidden');
+}
+
 // ─── Petición autenticada a DriCloud ─────────────────────────────────────────
 export async function driCloudRequest<T>(
   endpoint: string,
   body?: Record<string, unknown>
+): Promise<T> {
+  return driCloudRequestOnce<T>(endpoint, body, true);
+}
+
+async function driCloudRequestOnce<T>(
+  endpoint: string,
+  body: Record<string, unknown> | undefined,
+  allowRetry: boolean
 ): Promise<T> {
   const token = await getDriCloudToken();
   const url = `${getClinicaApiUrl()}/${endpoint}`;
@@ -166,6 +183,12 @@ export async function driCloudRequest<T>(
   if (!response.ok) {
     const text = await response.text();
     console.error(`[DriCloud] Error HTTP en ${endpoint}:`, text);
+    // 401/403 → token caducado: limpiar caché y reintentar UNA vez con login nuevo
+    if (allowRetry && (response.status === 401 || response.status === 403)) {
+      console.warn(`[DriCloud] HTTP ${response.status} en ${endpoint} → token caducado, reintentando con login nuevo`);
+      clearTokenCache();
+      return driCloudRequestOnce<T>(endpoint, body, false);
+    }
     throw new DriCloudSubscriptionError(`HTTP ${response.status} en ${endpoint}`);
   }
 
@@ -173,6 +196,12 @@ export async function driCloudRequest<T>(
 
   if (data.Successful === false) {
     const msg = data.Html || data.ErrorMessage || 'Error de DriCloud';
+    // Token inválido/caducado → renovar sesión y reintentar UNA vez (evita quedarse en modo demo)
+    if (allowRetry && isAuthErr(msg)) {
+      console.warn(`[DriCloud] Token rechazado en ${endpoint} ("${msg}") → reintentando con login nuevo`);
+      clearTokenCache();
+      return driCloudRequestOnce<T>(endpoint, body, false);
+    }
     console.warn(`[DriCloud] ⚠️  ${endpoint}: ${msg}`);
     throw new DriCloudSubscriptionError(msg);
   }
